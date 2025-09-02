@@ -1,0 +1,88 @@
+/* Attendance.css */
+
+/* container */
+.table-container { max-width: 1200px; margin: 12px auto; }
+
+/* small OT inputs */
+.ot-input { width: 110px; }
+
+/* checkbox size */
+.present-checkbox { width: 22px; height: 22px; }
+
+/* group (dept) header style */
+.bootstrap-table .group-row {
+  background: linear-gradient(90deg, #f8fafc, #eef6ff);
+  font-weight: 700;
+  color: #0b3d91;
+  border-left: 4px solid #cfe2ff;
+}
+
+/* manager node style (treegrid) */
+.bootstrap-table .manager-row td {
+  color: #c82333; /* danger red */
+  font-weight: 700;
+}
+
+/* muted manager color */
+.bootstrap-table .manager-muted td { color: #6c757d; }
+
+/* indent employee rows (treechild) */
+.bootstrap-table .employee-row td { padding-left: 1.0rem; }
+
+/* flatpickr mark for days that have data */
+.flatpickr-day.has-data {
+  background: #fff3cd;
+  color: #856404;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+/* center dash for empty OT */
+.ot-empty {
+  text-align: center;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+/* notes textarea styling */
+.notes-editor {
+  width: 100%;
+  min-height: 38px;
+  resize: vertical;
+  padding: 6px;
+}
+
+/* clear OT button inside input group */
+.input-group .btn-clear-ot {
+  padding: 0 8px;
+  font-size: 1rem;
+  line-height: 1;
+  color: #dc3545;
+}
+
+/* highlight background */
+.flatpickr-day.has-data {
+  background: #ffeeba !important;
+  color: #856404 !important;
+  font-weight: bold;
+  border-radius: 50%;
+  position: relative;
+}
+
+.flatpickr-day.has-data::after {
+  content: "•";
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  color: #d63384;
+  font-size: 1rem;
+}
+
+
+/* small icon styles */
+#btnDownload i { font-size: 1.05rem; }
+
+/* responsive */
+@media (max-width: 768px) {
+  .ot-input { width: 90px; }
+}

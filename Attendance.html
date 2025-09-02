@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>ระบบเช็คคนเข้า - Attendance</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap + icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- bootstrap-table core CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/bootstrap-table@1.24.2/dist/bootstrap-table.min.css">
+
+  <!-- flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <!-- treegrid CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-treegrid@0.3.0/css/jquery.treegrid.css">
+
+  <!-- custom -->
+  <link rel="stylesheet" href="Attendance.css">
+</head>
+<body class="bg-light">
+<div class="container table-container py-3">
+
+  <!-- Header + toolbar -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="m-0">ระบบเช็คคนเข้า (Attendance)</h3>
+    <div id="toolbar" class="d-flex align-items-center gap-2">
+      <label class="me-2 mb-0">เลือกวันที่:</label>
+      <input id="datePicker" class="form-control d-inline-block" style="width:160px"/>
+      <button id="btnCreate" class="btn btn-outline-success btn-sm d-none">สร้างใหม่</button>
+      <button id="btnEdit" class="btn btn-outline-primary btn-sm">แก้ไข</button>
+      <button id="btnCancel" class="btn btn-outline-secondary btn-sm d-none">ยกเลิก</button>
+      <button id="btnSave" class="btn btn-primary btn-sm d-none">บันทึก</button>
+    </div>
+  </div>
+
+  <!-- Filter row -->
+  <div class="row mb-2 g-2 align-items-center">
+    <div class="col-md-3">
+      <select id="departmentFilter" class="form-select">
+        <option value="">ทุกแผนก</option>
+      </select>
+    </div>
+    <div class="col-md-6 d-flex align-items-center gap-3">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="groupByDept">
+        <label class="form-check-label" for="groupByDept">จัดกลุ่มตามแผนก</label>
+      </div>
+      <div class="form-check d-none">
+        <input class="form-check-input" type="checkbox" id="showManagersRed" checked>
+        <label class="form-check-label" for="showManagersRed">หัวหน้าแผนกสีแดง</label>
+      </div>
+    </div>
+    <div class="col-md-3 text-end">
+      <!-- search / showColumns จะขึ้นเอง -->
+    </div>
+  </div>
+
+  <!-- Table -->
+  <table id="attendanceTable" class="table table-striped"
+         data-toggle="table"
+         data-url="get_attendance.php"
+         data-method="get"
+         data-search="true"
+         data-pagination="true"
+         data-page-size="25"
+         data-show-columns="true"
+         data-reorderable-columns="true"
+         data-show-export="true"
+         data-export-types='["excel","csv","txt"]'
+         data-pagination-v-align="both"
+         data-locale="th-TH"
+         data-toolbar="#toolbar">
+    <thead>
+      <tr>
+        <th rowspan="2" data-field="present" data-formatter="presentFormatter" data-sortable="true">Present</th>
+        <th rowspan="2" data-field="employee_code" data-sortable="true">รหัส</th>
+        <th rowspan="2" data-field="full_name" data-sortable="true">ชื่อ - นามสกุล</th>
+        <th rowspan="2" data-field="department_name" data-sortable="true">แผนก</th>
+        <th rowspan="2" data-field="manager_name" data-sortable="true">หัวหน้า</th>
+        <th colspan="2" class="text-center">OT</th>
+        <th rowspan="2" data-field="notes" data-formatter="notesFormatter">หมายเหตุ</th>
+      </tr>
+      <tr>
+        <th data-field="ot_start" data-formatter="otStartFormatter" data-sortable="true">OT (เริ่ม)</th>
+        <th data-field="ot_end" data-formatter="otEndFormatter" data-sortable="true">OT (สิ้นสุด)</th>
+      </tr>
+    </thead>
+  </table>
+</div>
+
+<!-- ================= Scripts ================= -->
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- jquery-treegrid -->
+<script src="https://cdn.jsdelivr.net/npm/jquery-treegrid@0.3.0/js/jquery.treegrid.min.js"></script>
+
+<!-- tableExport -->
+<script src="https://cdn.jsdelivr.net/npm/tableexport.jquery.plugin@1.29.0/tableExport.min.js"></script>
+
+<!-- bootstrap-table core -->
+<script src="https://unpkg.com/bootstrap-table@1.24.2/dist/bootstrap-table.min.js"></script>
+
+<!-- bootstrap-table extensions -->
+<script src="https://unpkg.com/bootstrap-table@1.24.2/dist/extensions/treegrid/bootstrap-table-treegrid.min.js"></script>
+<script src="https://unpkg.com/bootstrap-table@1.24.2/dist/extensions/export/bootstrap-table-export.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+<script src="https://unpkg.com/bootstrap-table@1.22.1/dist/extensions/reorder-columns/bootstrap-table-reorder-columns.min.js"></script>
+
+
+<!-- bootstrap-table Thai locale -->
+<script src="https://unpkg.com/bootstrap-table@1.24.2/dist/locale/bootstrap-table-th-TH.min.js"></script>
+
+<!-- flatpickr + Thai locale -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- custom app -->
+<script src="Attendance.js"></script>
+</body>
+</html>
