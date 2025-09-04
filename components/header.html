@@ -1,0 +1,26 @@
+<!-- /components/header.html -->
+
+<header class="d-flex flex-wrap justify-content-center justify-content-md-between align-items-center shadow-sm border-bottom position-sticky" style="height: auto; z-index: 99;">
+  <!-- Left -->
+  <div class="header-left d-flex flex-column justify-content-center">
+    <h4 class="mb-0 text-primary kanit-semibold">ระบบลงเวลาทำงาน</h4>
+  </div>
+
+  <!-- Center -->
+  <ul class="header-center nav position-absolute top-50 start-50 translate-middle">
+    <li><a href="../Attendance/Attendance.php" class="nav-link px-3 fw-semibold link-secondary active">ลงเวลา</a></li>
+    <li><a href="../Report/Report.php" class="nav-link px-3 fw-semibold">สรุป</a></li>
+  </ul>
+
+  <!-- Right -->
+  <div class="header-right d-flex gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <label class="me-2 mb-0">เลือกวันที่:</label>
+      <input id="datePicker" class="form-control flatpickr-input" style="width:160px" type="text" readonly>
+      <button id="btnCreate" class="btn btn-outline-success btn-sm d-none">สร้างใหม่</button>
+      <button id="btnEdit" class="btn btn-outline-primary btn-sm">แก้ไข</button>
+      <button id="btnCancel" class="btn btn-outline-secondary btn-sm d-none">ยกเลิก</button>
+      <button id="btnSave" class="btn btn-primary btn-sm d-none">บันทึก</button>
+    </div>
+  </div>
+</header>

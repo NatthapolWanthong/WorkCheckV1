@@ -1,18 +1,10 @@
 <?php
+
+// /connection/save_attendance.php
+
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
 include "dbconnect.php";
-
-/*
-POST JSON:
-{
-  "date": "2025-09-02",
-  "records": [
-    {"user_id": 1, "present": 1, "ot_start": "18:00", "ot_end": "20:00"},
-    ...
-  ]
-}
-*/
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {
@@ -26,7 +18,6 @@ $records = $input['records'] ?? [];
 mysqli_begin_transaction($connection);
 
 try {
-    // ensure attendance_days exists
     $stmt = mysqli_prepare($connection, "SELECT id FROM attendance_days WHERE att_date = ?");
     mysqli_stmt_bind_param($stmt, "s", $date);
     mysqli_stmt_execute($stmt);
@@ -43,7 +34,6 @@ try {
         mysqli_stmt_close($stmt);
     }
 
-    // upsert records
     $upsert_sql = "
     INSERT INTO attendance_records (day_id, user_id, present, ot_start, ot_end, notes)
     VALUES (?, ?, ?, ?, ?, ?)

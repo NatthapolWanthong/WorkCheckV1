@@ -1,18 +1,13 @@
 <?php
-// export_attendance.php
+
+// /connection/export_attendance.php
+
 include "dbconfig.php";
 include "dbconnect.php";
-
-/*
-GET params:
-- date (required)
-- department_id (optional)
-*/
 
 $date = $_GET['date'] ?? date('Y-m-d');
 $department_id = isset($_GET['department_id']) && $_GET['department_id'] !== '' ? intval($_GET['department_id']) : null;
 
-// find day id (if not exist we still export default present=1)
 $day_id = null;
 $stmt = mysqli_prepare($connection, "SELECT id FROM attendance_days WHERE att_date = ?");
 mysqli_stmt_bind_param($stmt, "s", $date);
@@ -59,16 +54,13 @@ if ($types !== "") {
 mysqli_stmt_execute($stmt);
 $res = mysqli_stmt_get_result($stmt);
 
-// send CSV headers
 $filename = "attendance_{$date}.csv";
 header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="'.$filename.'";');
 $output = fopen('php://output', 'w');
 
-// output BOM for Excel UTF-8
 fwrite($output, "\xEF\xBB\xBF");
 
-// header row
 fputcsv($output, ['Employee Code','Full Name','Department','Manager','Present (1=มา)','OT Start','OT End','Notes']);
 
 while ($row = mysqli_fetch_assoc($res)) {

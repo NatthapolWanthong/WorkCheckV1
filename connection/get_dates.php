@@ -1,4 +1,7 @@
 <?php
+
+// /connection/get_dates.php
+
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
 include "dbconnect.php";

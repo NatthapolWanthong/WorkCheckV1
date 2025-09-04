@@ -1,0 +1,95 @@
+/* /page/Attendance/Attendance.css */
+
+/* ============ Layout ============ */
+.table-container {
+  max-width: 1200px;
+  margin: 12px auto;
+}
+
+/* Input sizes */
+.ot-input { width: 110px; }
+@media (max-width: 768px) {
+  .ot-input { width: 90px; }
+  .custom-filter { width: 100%; margin-top: .5rem; }
+}
+
+/* Checkboxes */
+.present-checkbox {
+  width: 22px;
+  height: 22px;
+}
+
+/* Row styles */
+.bootstrap-table .group-row {
+  background: linear-gradient(90deg, #f8fafc, #eef6ff);
+  font-weight: 700;
+  color: #0b3d91;
+  border-left: 4px solid #cfe2ff;
+}
+.bootstrap-table .manager-row td { color: #c82333; font-weight: 700; }
+.bootstrap-table .manager-muted td { color: #6c757d; }
+.bootstrap-table .employee-row td { padding-left: 1rem; }
+
+/* OT empty */
+.ot-empty {
+  text-align: center;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+/* Notes */
+.notes-editor {
+  width: 100%;
+  min-height: 38px;
+  resize: vertical;
+  padding: 6px;
+}
+
+/* OT clear button */
+.input-group .btn-clear-ot {
+  padding: 0 8px;
+  font-size: 1rem;
+  line-height: 1;
+  color: #dc3545;
+}
+
+/* Calendar highlight */
+.flatpickr-day.has-data {
+  background: #ffeeba !important;
+  color: #856404 !important;
+  font-weight: bold;
+  border-radius: 50%;
+  position: relative;
+}
+.flatpickr-day.has-data::after {
+  content: "•";
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  color: #d63384;
+  font-size: 1rem;
+}
+
+/* Toolbar */
+.fixed-table-toolbar .search-input { margin-left: .5rem; }
+#customToolbar .form-select-sm { min-width: 160px; }
+#customToolbar label { font-size: 0.85rem; color: #6c757d; }
+
+/* Loading overlay */
+.fixed-table-loading .loading-wrap {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.fixed-table-loading .loading-text { font-size: 16px; color: #495057; }
+.fixed-table-loading .animation-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #0d6efd; animation: dotBlink 1s infinite;
+}
+@keyframes dotBlink {
+  0% { opacity: .2; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: .2; transform: scale(.8); }
+}
