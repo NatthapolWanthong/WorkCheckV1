@@ -1,6 +1,6 @@
 <?php
 
-// /connection/get_attendance.php
+// /connection/get_attendance.php ห้ามลบบรรทัดนี้
 
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
@@ -59,7 +59,8 @@ if ($count_stmt) {
 $cols = "u.id as user_id, u.employee_code, u.first_name, u.last_name, u.department_id, d.name as department_name, CONCAT(m.first_name,' ',m.last_name) as manager_name";
 
 if ($day_id) {
-    $cols .= ", COALESCE(ar.present,1) as present, ar.ot_start, ar.ot_end, ar.notes";
+    // ดึง updated_at มาเป็น date_modified
+    $cols .= ", COALESCE(ar.present,1) as present, ar.ot_start, ar.ot_end, ar.notes, ar.updated_at as date_modified";
     $sql = "SELECT {$cols}
     FROM users u
     LEFT JOIN departments d ON d.id = u.department_id
@@ -67,8 +68,7 @@ if ($day_id) {
     LEFT JOIN attendance_records ar ON ar.user_id = u.id AND ar.day_id = ?
     WHERE 1=1 {$where_sql} {$search_sql}
     ";
-    // Sorting safe map
-    $allowed_sorts = ['employee_code','first_name','last_name','department_name','present','ot_start','ot_end'];
+    $allowed_sorts = ['employee_code','first_name','last_name','department_name','present','ot_start','ot_end','date_modified'];
     if (!in_array($sort, $allowed_sorts)) $sort = 'first_name';
     $sql .= " ORDER BY {$sort} {$order} LIMIT ? OFFSET ?";
 
@@ -77,19 +77,18 @@ if ($day_id) {
     $bind_values = [$day_id];
 
     if ($department_id) { $types .= "i"; $bind_values[] = $department_id; }
-
     if ($search !== '') { $types .= "sss"; $bind_values[] = $search; $bind_values[] = $search; $bind_values[] = $search; }
 
     $types .= "ii";
     $bind_values[] = $limit;
     $bind_values[] = $offset;
 
-    // Prepare bind
     mysqli_stmt_bind_param($stmt, $types, ...$bind_values);
     mysqli_stmt_execute($stmt);
     $res = mysqli_stmt_get_result($stmt);
 } else {
-    $cols .= ", 1 as present, NULL as ot_start, NULL as ot_end, NULL as notes";
+    // ยังไม่มี record ของวันนั้น -> ค่า default + date_modified = NULL
+    $cols .= ", 1 as present, NULL as ot_start, NULL as ot_end, NULL as notes, NULL as date_modified";
     $sql = "SELECT {$cols}
     FROM users u
     LEFT JOIN departments d ON d.id = u.department_id

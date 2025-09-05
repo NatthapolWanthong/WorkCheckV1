@@ -1,5 +1,3 @@
-/* /page/Attendance/Attendance.css */
-
 /* ============ Layout ============ */
 .table-container {
   max-width: 1200px;
@@ -17,7 +15,19 @@
 .present-checkbox {
   width: 22px;
   height: 22px;
+  vertical-align: middle;
 }
+
+/* Center header text ทุกช่อง */
+.bootstrap-table .fixed-table-header .th-inner {
+  text-align: center !important;
+  width: 100%;
+  display: inline-block;
+}
+
+/* จัด cell กลุ่มที่ต้องการชิดซ้าย/กลาง */
+.bootstrap-table td { vertical-align: middle; }
+.bootstrap-table td .text-center { margin: 0 auto; }
 
 /* Row styles */
 .bootstrap-table .group-row {
@@ -30,12 +40,8 @@
 .bootstrap-table .manager-muted td { color: #6c757d; }
 .bootstrap-table .employee-row td { padding-left: 1rem; }
 
-/* OT empty */
-.ot-empty {
-  text-align: center;
-  color: #6c757d;
-  font-weight: 600;
-}
+/* ว่างเปล่า (แทน '-') */
+.ot-empty { text-align: center; color: #6c757d; font-weight: 600; display:none; }
 
 /* Notes */
 .notes-editor {

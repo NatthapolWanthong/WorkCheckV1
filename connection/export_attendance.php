@@ -1,6 +1,6 @@
 <?php
 
-// /connection/export_attendance.php
+// /connection/get_departments.php ห้ามลบบรรทัดนี้
 
 include "dbconfig.php";
 include "dbconnect.php";
@@ -44,7 +44,6 @@ if ($department_id) {
     $types .= "i";
     $params[] = $department_id;
 }
-
 $sql .= " ORDER BY d.name, u.first_name, u.last_name";
 
 $stmt = mysqli_prepare($connection, $sql);
@@ -59,20 +58,30 @@ header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="'.$filename.'";');
 $output = fopen('php://output', 'w');
 
+// BOM for Excel
 fwrite($output, "\xEF\xBB\xBF");
 
-fputcsv($output, ['Employee Code','Full Name','Department','Manager','Present (1=มา)','OT Start','OT End','Notes']);
+// Header
+fputcsv($output, ['Employee Code','Full Name','Department','Manager','Present','OT Start','OT End','Notes']);
 
+// Rows
 while ($row = mysqli_fetch_assoc($res)) {
+    $presentText = (intval($row['present']) === 1) ? 'มา' : '';
+
+    // ถ้า null/ค่าว่าง ให้เป็น '' (ไม่มี '-')
+    $otStart = isset($row['ot_start']) && $row['ot_start'] !== null ? substr($row['ot_start'],0,5) : '';
+    $otEnd   = isset($row['ot_end'])   && $row['ot_end']   !== null ? substr($row['ot_end'],0,5) : '';
+    $notes   = $row['notes'] ?? '';
+
     fputcsv($output, [
-        $row['employee_code'],
-        $row['full_name'],
-        $row['department_name'],
-        $row['manager_name'],
-        $row['present'],
-        $row['ot_start'],
-        $row['ot_end'],
-        $row['notes'],
+        $row['employee_code'] ?? '',
+        $row['full_name'] ?? '',
+        $row['department_name'] ?? '',
+        $row['manager_name'] ?? '',
+        $presentText,
+        $otStart,
+        $otEnd,
+        $notes,
     ]);
 }
 fclose($output);

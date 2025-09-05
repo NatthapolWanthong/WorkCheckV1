@@ -1,5 +1,4 @@
-<!-- /page/Attendance/Attendance.php -->
-
+<!-- วางไฟล์ Attendance.php ทั้งหมดทับของเดิมได้เลย -->
 <!doctype html>
 <html lang="th">
 <head>
@@ -20,8 +19,7 @@
   <link rel="stylesheet" href="Attendance.css">
   
   <!-- Header -->
-   <link rel="stylesheet" href="../../components/header.css">
-
+  <link rel="stylesheet" href="../../components/header.css">
 </head>
 <body class="bg-light">
   <!-- Header -->
@@ -37,7 +35,8 @@
         <option value="">ทุกแผนก</option>
       </select>
     </div>
-    <button id="btnTogglePresent" class="btn btn-outline-warning btn-sm">เลือก/ยกเลิกทั้งหมด</button>
+    <!-- ปุ่มนี้โผล่เฉพาะตอน Edit mode -->
+    <button id="btnTogglePresent" class="btn btn-outline-warning btn-sm d-none">เลือก/ยกเลิกทั้งหมด</button>
   </div>
 
   <!-- Table -->
@@ -55,25 +54,47 @@
          data-toolbar="#customToolbar">
     <thead>
       <tr>
-        <th rowspan="2" data-field="date_work" data-sortable="true">วันที่ทำงาน</th>
-        <th rowspan="2" data-field="present" data-formatter="presentFormatter">Present</th>
-        <th rowspan="2" data-field="employee_code" data-sortable="true">รหัส</th>
-        <th rowspan="2" data-field="full_name" data-sortable="true">ชื่อ - นามสกุล</th>
-        <th rowspan="2" data-field="department_name" data-sortable="true">แผนก</th>
-        <th rowspan="2" data-field="manager_name" data-sortable="true">หัวหน้า</th>
+        <th rowspan="2" data-field="date_work" data-halign="center">วันที่ทำงาน</th>
+
+        <!-- PRESENT column (แสดง checkbox) — ให้โชว์บนเว็บ แต่ set ให้ 'ไม่ถูก export' -->
+        <th rowspan="2"
+            data-field="present"
+            data-formatter="presentFormatter"
+            data-align="center"
+            data-halign="center"
+            data-sortable="true"
+            data-force-hide="true">
+            Present
+        </th>
+
+        <th rowspan="2"
+            data-field="present_text"
+            data-visible="false"
+            data-force-export="true"
+            data-switchable="false">
+            Present (Export)
+        </th>
+
+        <th rowspan="2" data-field="employee_code" data-sortable="true" data-halign="center">รหัส</th>
+        <th rowspan="2" data-field="full_name" data-sortable="true" data-halign="center">ชื่อ - นามสกุล</th>
+        <th rowspan="2" data-field="department_name" data-sortable="true" data-halign="center">แผนก</th>
+        <th rowspan="2" data-field="manager_name" data-sortable="true" data-halign="center">หัวหน้า</th>
         <th colspan="2" class="text-center">OT</th>
-        <th rowspan="2" data-field="notes" data-formatter="notesFormatter">หมายเหตุ</th>
-        <th rowspan="2" data-field="date_modified" data-sortable="true">วันที่แก้ไข</th>
+        <th rowspan="2" data-field="notes" data-formatter="notesFormatter" data-halign="center">หมายเหตุ</th>
+        <th rowspan="2" data-field="date_modified" data-formatter="dateModifiedFormatter" data-sortable="true" data-halign="center">วันที่แก้ไข</th>
       </tr>
       <tr>
-        <th data-field="ot_start" data-formatter="otStartFormatter">OT (เริ่ม)</th>
-        <th data-field="ot_end" data-formatter="otEndFormatter">OT (สิ้นสุด)</th>
+        <th data-field="ot_start" data-formatter="otStartFormatter" data-sortable="true" data-align="center" data-halign="center">OT (เริ่ม)</th>
+        <th data-field="ot_end" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">OT (สิ้นสุด)</th>
+        <th data-field="ot_task" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">งานที่ปฏิบัติ</th>
+        <th data-field="ot_result" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">ผลลัพธ์</th>
+        <th data-field="ot_approver" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">ผู้อนุมัติ</th>
       </tr>
     </thead>
   </table>
 </div>
 
-<!-- Scripts -->
+<!-- Scripts (เหมือนเดิม) -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery-treegrid@0.3.0/js/jquery.treegrid.min.js"></script>

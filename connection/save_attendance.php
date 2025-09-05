@@ -1,6 +1,6 @@
 <?php
 
-// /connection/save_attendance.php
+// /connection/save_attendance.php ห้ามลบบรรทัดนี้
 
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";

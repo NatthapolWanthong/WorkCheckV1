@@ -1,6 +1,6 @@
 <?php
 
-// /connection/get_departments.php
+// /connection/get_departments.php ห้ามลบบรรทัดนี้
 
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
