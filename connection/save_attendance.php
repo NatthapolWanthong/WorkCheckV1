@@ -34,26 +34,36 @@ try {
         mysqli_stmt_close($stmt);
     }
 
+    session_start();
+    $user_id = $_SESSION['user_id'] ?? null;
+
     $upsert_sql = "
-    INSERT INTO attendance_records (day_id, user_id, present, ot_start, ot_end, notes)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE present = VALUES(present), ot_start = VALUES(ot_start), ot_end = VALUES(ot_end), notes = VALUES(notes), updated_at = CURRENT_TIMESTAMP
-    ";
+    INSERT INTO attendance_records 
+    (day_id, user_id, present, ot_start, ot_end, ot_task, ot_result, ot_approver_id, notes)
+    VALUES (?,?,?,?,?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE
+    present=VALUES(present),
+    ot_start=VALUES(ot_start),
+    ot_end=VALUES(ot_end),
+    ot_task=VALUES(ot_task),
+    ot_result=VALUES(ot_result),
+    ot_approver_id=VALUES(ot_approver_id),
+    notes=VALUES(notes),
+    updated_at=CURRENT_TIMESTAMP";
     $upsert = mysqli_prepare($connection, $upsert_sql);
     foreach ($records as $rec) {
         $uid = intval($rec['user_id']);
         $present = intval($rec['present'] ?? 0);
-        $ot_start = $rec['ot_start'] ?? null;
-        $ot_end = $rec['ot_end'] ?? null;
-        $notes = $rec['notes'] ?? null;
+        $ot_start = $rec['ot_start'] ?: null;
+        $ot_end = $rec['ot_end'] ?: null;
+        $ot_task = $rec['ot_task'] ?: null;
+        $ot_result = intval($rec['ot_result'] ?? 0);
+        $notes = $rec['notes'] ?: null;
 
-        // normalize empty string to null
-        if ($ot_start === '') $ot_start = null;
-        if ($ot_end === '') $ot_end = null;
-
-        mysqli_stmt_bind_param($upsert, "iiisss", $day_id, $uid, $present, $ot_start, $ot_end, $notes);
+        mysqli_stmt_bind_param($upsert,"iiisssiss",
+            $day_id,$uid,$present,$ot_start,$ot_end,$ot_task,$ot_result,$user_id,$notes);
         mysqli_stmt_execute($upsert);
-    }
+        }
     mysqli_stmt_close($upsert);
 
     mysqli_commit($connection);

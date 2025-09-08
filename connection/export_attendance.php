@@ -67,8 +67,6 @@ fputcsv($output, ['Employee Code','Full Name','Department','Manager','Present','
 // Rows
 while ($row = mysqli_fetch_assoc($res)) {
     $presentText = (intval($row['present']) === 1) ? 'มา' : '';
-
-    // ถ้า null/ค่าว่าง ให้เป็น '' (ไม่มี '-')
     $otStart = isset($row['ot_start']) && $row['ot_start'] !== null ? substr($row['ot_start'],0,5) : '';
     $otEnd   = isset($row['ot_end'])   && $row['ot_end']   !== null ? substr($row['ot_end'],0,5) : '';
     $notes   = $row['notes'] ?? '';

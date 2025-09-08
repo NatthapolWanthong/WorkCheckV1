@@ -1,7 +1,8 @@
 /* ============ Layout ============ */
 .table-container {
-  max-width: 1200px;
-  margin: 12px auto;
+  max-width: 1500px;
+  margin: 0;
+  padding: 0;
 }
 
 /* Input sizes */
@@ -40,8 +41,6 @@
 .bootstrap-table .manager-muted td { color: #6c757d; }
 .bootstrap-table .employee-row td { padding-left: 1rem; }
 
-/* ว่างเปล่า (แทน '-') */
-.ot-empty { text-align: center; color: #6c757d; font-weight: 600; display:none; }
 
 /* Notes */
 .notes-editor {

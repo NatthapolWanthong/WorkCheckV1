@@ -1,4 +1,4 @@
-<!-- วางไฟล์ Attendance.php ทั้งหมดทับของเดิมได้เลย -->
+<!--  Attendance.php ห้ามลบบรรทัดนี้ -->
 <!doctype html>
 <html lang="th">
 <head>
@@ -16,16 +16,14 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-treegrid@0.3.0/css/jquery.treegrid.css">
 
   <!-- Custom -->
-  <link rel="stylesheet" href="Attendance.css">
+  <link rel="stylesheet" href="page/Attendance/Attendance.css">
   
   <!-- Header -->
-  <link rel="stylesheet" href="../../components/header.css">
+  <link rel="stylesheet" href="components/header.css">
 </head>
 <body class="bg-light">
-  <!-- Header -->
-  <?php include('../../components/header.html'); ?>
 
-<div class="container table-container py-3">
+<div class="container table-container">
 
   <!-- Toolbar -->
   <div id="customToolbar" class="mb-2 d-flex flex-wrap gap-2 align-items-center">
@@ -43,7 +41,7 @@
   <table id="attendanceTable" 
          class="table table-striped"
          data-toggle="table"
-         data-url="../../connection/get_attendance.php"
+         data-url="connection/get_attendance.php"
          data-pagination="true"
          data-page-size="25"
          data-search="true"
@@ -55,8 +53,6 @@
     <thead>
       <tr>
         <th rowspan="2" data-field="date_work" data-halign="center">วันที่ทำงาน</th>
-
-        <!-- PRESENT column (แสดง checkbox) — ให้โชว์บนเว็บ แต่ set ให้ 'ไม่ถูก export' -->
         <th rowspan="2"
             data-field="present"
             data-formatter="presentFormatter"
@@ -66,7 +62,6 @@
             data-force-hide="true">
             Present
         </th>
-
         <th rowspan="2"
             data-field="present_text"
             data-visible="false"
@@ -74,27 +69,49 @@
             data-switchable="false">
             Present (Export)
         </th>
-
         <th rowspan="2" data-field="employee_code" data-sortable="true" data-halign="center">รหัส</th>
         <th rowspan="2" data-field="full_name" data-sortable="true" data-halign="center">ชื่อ - นามสกุล</th>
         <th rowspan="2" data-field="department_name" data-sortable="true" data-halign="center">แผนก</th>
         <th rowspan="2" data-field="manager_name" data-sortable="true" data-halign="center">หัวหน้า</th>
-        <th colspan="2" class="text-center">OT</th>
+
+
+        <th colspan="6" class="text-center">OT</th>
+
         <th rowspan="2" data-field="notes" data-formatter="notesFormatter" data-halign="center">หมายเหตุ</th>
         <th rowspan="2" data-field="date_modified" data-formatter="dateModifiedFormatter" data-sortable="true" data-halign="center">วันที่แก้ไข</th>
       </tr>
       <tr>
         <th data-field="ot_start" data-formatter="otStartFormatter" data-sortable="true" data-align="center" data-halign="center">OT (เริ่ม)</th>
         <th data-field="ot_end" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">OT (สิ้นสุด)</th>
-        <th data-field="ot_task" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">งานที่ปฏิบัติ</th>
-        <th data-field="ot_result" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">ผลลัพธ์</th>
-        <th data-field="ot_approver" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">ผู้อนุมัติ</th>
+        <th data-field="ot_task" data-formatter="otTaskFormatter" data-align="center">งานที่ปฏิบัติ</th>
+
+        <!-- ✅ export-only -->
+        <th data-field="ot_result_text"
+            data-visible="false"
+            data-force-export="true"
+            data-switchable="false">OT ผลลัพธ์ (Export)</th>
+
+        <!-- ✅ checkbox บนเว็บเท่านั้น -->
+        <th data-field="ot_result"
+            data-formatter="otResultFormatter"
+            data-align="center"
+            data-halign="center"
+            data-sortable="true"
+            data-force-hide="true">ผลลัพธ์</th>
+
+        <!-- ✅ ผู้อนุมัติ อยู่ในกลุ่ม OT -->
+        <th data-field="ot_approver" data-align="center" data-sortable="true">ผู้อนุมัติ</th>
       </tr>
+
+
+
     </thead>
   </table>
 </div>
 
 <!-- Scripts (เหมือนเดิม) -->
+<!-- <script type="module" src="../MockUser.js"></script>
+<script type="module" src="../tableFactory.js"></script> -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery-treegrid@0.3.0/js/jquery.treegrid.min.js"></script>
@@ -106,6 +123,6 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<script src="Attendance.js"></script>
+<script type="module" src="page/Attendance/Attendance.js"></script>
 </body>
 </html>

@@ -1,0 +1,17 @@
+/* /page/main.css */
+
+/* ปรับขนาด container ให้เต็มจอ */
+#pageContent {
+  min-height: calc(100vh - 70px); /* ลบความสูง header ออก */
+  background: #fff;
+  border-radius: 0;               /* ไม่ต้องมีขอบโค้ง */
+  padding: 0 20px;
+  box-shadow: none;               /* ไม่ต้องมีเงาถ้าต้องการเต็มจริงๆ */
+  margin: 0;
+  width: 100%;
+}
+/* Loading state */
+#pageContent .text-muted {
+  font-size: 1.1rem;
+  color: #888;
+}
