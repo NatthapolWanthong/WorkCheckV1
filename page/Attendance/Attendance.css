@@ -60,20 +60,24 @@
 
 /* Calendar highlight */
 .flatpickr-day.has-data {
-  background: #ffeeba !important;
-  color: #856404 !important;
-  font-weight: bold;
-  border-radius: 50%;
+  background-color: #eef9ff !important;
+  border-radius: 6px;
+  color: #000 !important;
   position: relative;
 }
+
 .flatpickr-day.has-data::after {
-  content: "•";
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #007bff;
   position: absolute;
-  bottom: 3px;
-  right: 5px;
-  color: #d63384;
-  font-size: 1rem;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
 }
+
 
 /* Toolbar */
 .fixed-table-toolbar .search-input { margin-left: .5rem; }

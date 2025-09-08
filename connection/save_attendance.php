@@ -51,19 +51,23 @@ try {
     notes=VALUES(notes),
     updated_at=CURRENT_TIMESTAMP";
     $upsert = mysqli_prepare($connection, $upsert_sql);
-    foreach ($records as $rec) {
-        $uid = intval($rec['user_id']);
-        $present = intval($rec['present'] ?? 0);
-        $ot_start = $rec['ot_start'] ?: null;
-        $ot_end = $rec['ot_end'] ?: null;
-        $ot_task = $rec['ot_task'] ?: null;
-        $ot_result = intval($rec['ot_result'] ?? 0);
-        $notes = $rec['notes'] ?: null;
+    // (ภายใน foreach ของ $records)
+foreach ($records as $rec) {
+    $uid = isset($rec['user_id']) ? intval($rec['user_id']) : 0;
+    $present = isset($rec['present']) ? intval($rec['present']) : 0;
 
-        mysqli_stmt_bind_param($upsert,"iiisssiss",
-            $day_id,$uid,$present,$ot_start,$ot_end,$ot_task,$ot_result,$user_id,$notes);
-        mysqli_stmt_execute($upsert);
-        }
+    // ถ้า key ไม่มี หรือ เป็น empty string => เก็บเป็น NULL (เพื่อให้ DB ได้ค่า NULL)
+    $ot_start  = (isset($rec['ot_start']) && $rec['ot_start'] !== '') ? $rec['ot_start'] : null;
+    $ot_end    = (isset($rec['ot_end'])   && $rec['ot_end']   !== '') ? $rec['ot_end']   : null;
+    $ot_task   = (isset($rec['ot_task'])  && $rec['ot_task']  !== '') ? $rec['ot_task']  : null;
+    $ot_result = isset($rec['ot_result']) ? intval($rec['ot_result']) : 0;
+    $notes     = (isset($rec['notes'])    && $rec['notes']    !== '') ? $rec['notes']    : null;
+
+    mysqli_stmt_bind_param($upsert,"iiisssiss",
+        $day_id, $uid, $present, $ot_start, $ot_end, $ot_task, $ot_result, $user_id, $notes);
+    mysqli_stmt_execute($upsert);
+}
+
     mysqli_stmt_close($upsert);
 
     mysqli_commit($connection);
