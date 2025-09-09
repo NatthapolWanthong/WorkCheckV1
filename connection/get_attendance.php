@@ -86,12 +86,13 @@ $cols = "u.id as user_id, u.employee_code, u.first_name, u.last_name,
 
 if ($day_id) {
     $cols .= ", COALESCE(ar.present,1) as present,
+           ar.clock_in, ar.clock_out,
            ar.ot_start, ar.ot_end, 
-           ar.ot_task, ar.ot_result,
+           ar.ot_minutes, ar.ot_task, ar.product_count, ar.ot_result,
            ar.ot_approver_id,
            ar.notes, ar.updated_at as date_modified,
            CONCAT(a.first_name,' ',a.last_name) as ot_approver,
-           CASE WHEN ar.ot_result=1 THEN '✔ ผ่าน' ELSE '' END as ot_result_text";
+           CASE WHEN ar.ot_result=1 THEN 'ได้ตามเป้า' ELSE 'ไม่ได้ตามเป้า' END as ot_result_text";
     $sql = "SELECT {$cols}
     FROM users u
     LEFT JOIN departments d ON d.id = u.department_id
@@ -100,7 +101,7 @@ if ($day_id) {
     LEFT JOIN users a ON ar.ot_approver_id=a.id
     WHERE 1=1 {$where_sql} {$search_sql}";
 
-    $allowed_sorts = ['employee_code','first_name','last_name','department_name','present','ot_start','ot_end','date_modified'];
+    $allowed_sorts = ['employee_code','first_name','last_name','department_name','present','ot_start','ot_end','date_modified','clock_in','clock_out'];
     if (!in_array($sort, $allowed_sorts)) $sort = 'first_name';
     $sql .= " ORDER BY {$sort} {$order} LIMIT ? OFFSET ?";
 
@@ -114,7 +115,8 @@ if ($day_id) {
     $res = mysqli_stmt_get_result($stmt);
 
 } else {
-    $cols .= ", 1 as present, NULL as ot_start, NULL as ot_end, NULL as notes, NULL as date_modified";
+    // no day record -> use defaults
+    $cols .= ", 1 as present, '08:00:00' as clock_in, '17:00:00' as clock_out, NULL as ot_start, NULL as ot_end, NULL as ot_minutes, NULL as ot_task, NULL as product_count, 0 as ot_result, NULL as ot_approver_id, NULL as notes, NULL as date_modified, NULL as ot_approver";
     $sql = "SELECT {$cols}
     FROM users u
     LEFT JOIN departments d ON d.id = u.department_id
@@ -145,6 +147,9 @@ $rows = [];
 while ($r = mysqli_fetch_assoc($res)) {
     $r['full_name'] = $r['first_name'] . ' ' . $r['last_name'];
     $r['present'] = intval($r['present']);
+    // ensure ot_minutes/product_count numeric or null
+    if (isset($r['ot_minutes']) && $r['ot_minutes'] !== null) $r['ot_minutes'] = intval($r['ot_minutes']);
+    if (isset($r['product_count']) && $r['product_count'] !== null) $r['product_count'] = intval($r['product_count']);
     $rows[] = $r;
 }
 
