@@ -1,4 +1,17 @@
 <!-- /page/Attendance/Attendance.php ห้ามลบบรรทัดนี้ -->
+
+<!-- Toolbar -->
+<div id="customToolbar" class="mb-2 d-flex flex-wrap gap-2 align-items-center">
+<div class="d-flex align-items-center">
+    <label for="departmentFilter" class="form-label mb-0 small text-muted me-2">แผนก</label>
+    <select id="departmentFilter" class="form-select form-select-sm" style="width:180px">
+    <option value="">ทุกแผนก</option>
+    </select>
+</div>
+<!-- ปุ่มนี้โผล่เฉพาะตอน Edit mode -->
+<button id="btnTogglePresent" class="btn btn-outline-warning btn-sm d-none">เลือก/ยกเลิกทั้งหมด</button>
+</div>
+
 <!-- Table -->
 <table id="attendanceTable"
 class="table table-striped"

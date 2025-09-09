@@ -1,5 +1,5 @@
 // /page/Attendance/Attendance.js
-import user from "../MockUser.js"; // ใช้ absolute path เพื่อความชัวร์
+import user from "../MockUser.js";
 
 // module-scope state
 let editMode = false;
@@ -222,10 +222,16 @@ function updateButtons() {
 }
 
 function applyPermissions() {
-  const allowEdit = user.can_edit && (userPermissions?.can_edit ?? true);
-  const allowHistory = user.can_view_history && (userPermissions?.can_view_history ?? true);
+  // ถ้า user.can_edit หรือ permission ของแผนก can_edit เป็น truthy => อนุญาต
+  const allowEdit = !!(user?.can_edit) || !!(userPermissions?.can_edit);
+  const allowHistory = !!(user?.can_view_history) || !!(userPermissions?.can_view_history);
+
+  // ใช้ toggle เพื่อไม่ให้ปิด element ถ้าเป็น UI อื่น ๆ
   if (!allowEdit) $("#btnEdit, #btnSave, #btnCancel").hide();
+  else $("#btnEdit, #btnSave, #btnCancel").show();
+
   if (!allowHistory) $('a[href="../History/History.php"]').hide();
+  else $('a[href="../History/History.php"]').show();
 }
 
 function bindUIEvents() {
