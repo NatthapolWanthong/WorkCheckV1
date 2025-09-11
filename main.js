@@ -58,14 +58,24 @@ function injectModuleScriptWithOnload(resolvedUrl, globalName) {
       `;
       wrapper.setAttribute('data-dyn-script', resolvedUrl);
 
-      // append and wait a little for import to happen. We cannot reliably trap the internal import promise,
-      // so we resolve after a short delay and return whatever was attached to window[globalName]
-      wrapper.onload = () => setTimeout(() => {
-        const m = window[globalName];
-        if (m) return resolve(m);
-        // if not attached, still resolve with null so caller can handle
-        return resolve(null);
-      }, 60);
+      // PATCHED: onload now polls for window[globalName] up to 2s (80ms interval)
+      wrapper.onload = () => {
+        const start = Date.now();
+        (function poll() {
+          try {
+            const m = window[globalName];
+            if (m) return resolve(m);
+            if (Date.now() - start > 2000) {
+              // timed out — resolve null so caller can handle fallback gracefully
+              console.warn('injectModuleScriptWithOnload: timed out waiting for', globalName);
+              return resolve(null);
+            }
+            setTimeout(poll, 80);
+          } catch (err) {
+            return reject(err);
+          }
+        })();
+      };
       wrapper.onerror = () => reject(new Error('Wrapper script injection error: ' + resolvedUrl));
 
       document.body.appendChild(wrapper);
@@ -177,7 +187,8 @@ async function loadPage(url, $link) {
     }
 
     currentPage = url;
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    // PATCHED: use valid behavior value
+    window.scrollTo({ top: 0, behavior: 'auto' });
   });
 
   $('.header-center .nav-link').removeClass('active link-secondary').addClass('link-dark');

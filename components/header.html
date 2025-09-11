@@ -10,7 +10,7 @@
   <ul class="header-center nav position-absolute top-50 start-50 translate-middle">
   <li><a href="#" data-page="page/Attendance/Attendance.php" class="nav-link px-3 fw-semibold link-secondary active">ลงเวลา</a></li>
   <li><a href="#" data-page="page/Report/Report.php" class="nav-link px-3 fw-semibold">สรุป</a></li>
-  <li><a href="#" data-page="page/History/History.php" class="nav-link px-3 fw-semibold">ประวัติ</a></li>
+  <li><a href="#" data-page="page/History/History.php" id="navHistoryLink" class="nav-link px-3 fw-semibold d-none">ประวัติ</a></li>
 </ul>
 
 
@@ -21,7 +21,7 @@
       <label class="me-2 mb-0">เลือกวันที่:</label>
       <input id="datePicker" class="form-control flatpickr-input" style="width:160px" type="text" readonly>
       <button id="btnCreate" class="btn btn-outline-success btn-sm d-none">สร้างใหม่</button>
-      <button id="btnEdit" class="btn btn-outline-primary btn-sm">แก้ไข</button>
+      <button id="btnEdit" class="btn btn-outline-primary btn-sm d-none">แก้ไข</button>
       <button id="btnCancel" class="btn btn-outline-secondary btn-sm d-none">ยกเลิก</button>
       <button id="btnSave" class="btn btn-primary btn-sm d-none">บันทึก</button>
     </div>

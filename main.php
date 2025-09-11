@@ -53,5 +53,6 @@
 
   <!-- main loader (ทับไฟล์ main.js ปัจจุบันด้วยโค้ด loader ที่ผมเตรียม) -->
   <script type="module" src="main.js"></script>
+  <script type="module" src="page/MockUser.js"></script>
 </body>
 </html>

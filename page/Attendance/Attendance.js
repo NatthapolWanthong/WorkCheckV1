@@ -1,3 +1,4 @@
+// Attendance.js ห้ามลบบรรทัดนี้
 import user from "../MockUser.js";
 import MultiEditorFactory from "./MultiEditor.js";
 
@@ -21,105 +22,146 @@ import MultiEditorFactory from "./MultiEditor.js";
   let editedData = {};
   let userPermissions = null;
   let departmentsList = [];
-
-  // selection set (user_id numbers)
   let selectedRows = new Set();
-
-  // MultiEditor
   let multiEditor = null;
   let multiEditorActive = false;
 
-  // ---------- utils ----------
-  function today() { return new Date().toISOString().slice(0, 10); }
-  function formatDateKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-  function formatTimeCell(v) { if (!v) return ''; const hhmm = String(v).substring(0,5); return `<div class="text-center">${hhmm} น.</div>`; }
-  function formatDateTimeCell(v) { if (!v) return ''; return String(v).replace('T',' ').substring(0,16); }
+  // ---------- small utils ----------
+  const today = () => new Date().toISOString().slice(0, 10);
+  const formatDateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const formatTimeCell = v => v ? `<div class="text-center">${String(v).substring(0,5)} น.</div>` : '';
+  const formatDateTimeCell = v => v ? String(v).replace('T',' ').substring(0,16) : '';
+
+  // normalize department response (various server shapes)
+  function normalizeDepartments(data) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (data.departments && Array.isArray(data.departments)) return data.departments;
+    if (data.id !== undefined) return [data];
+    try {
+      const numericKeys = Object.keys(data).every(k => !isNaN(k));
+      return numericKeys ? Object.values(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
 
   // ---------- selection control ----------
   function setSelectionEnabled(enabled) {
-    // enable/disable header & row checkboxes used by bootstrap-table
     try {
       const $wrapper = $table.closest('.bootstrap-table');
       $wrapper.find('input[name="btSelectItem"], input[name="btSelectAll"]').prop('disabled', !enabled);
-      // visual cursor
       $wrapper.find('.fixed-table-body table tbody tr').css('cursor', enabled ? 'pointer' : 'default');
-
-      if (!enabled) {
-        try { $table.bootstrapTable('uncheckAll'); } catch(e) {}
-        selectedRows.clear();
-      }
-    } catch(e) { console.warn('setSelectionEnabled', e); }
+      if (!enabled) { try { $table.bootstrapTable('uncheckAll'); } catch(e) {} selectedRows.clear(); }
+    } catch (e) { console.warn('setSelectionEnabled', e); }
   }
 
   // ---------- preload ----------
   function loadDatesWithData() {
     return $.getJSON(`${API_BASE}/get_dates.php`, list => {
-      datesWithData = new Set((list || []).map(s => String(s)));
+      datesWithData = new Set((list || []).map(String));
     }).fail(() => { datesWithData = new Set(); });
   }
 
+  /**
+   * loadUserPermissions
+   * - ดึง departments, match กับ MockUser.department_id
+   * - merge: MockUser field ถ้าไม่ null ให้ override DB
+   * - เก็บผลลัพธ์ไว้ใน userPermissions
+   */
   function loadUserPermissions() {
-    return $.getJSON(`${API_BASE}/get_departments.php?department_id=${user.department_id}`, data => {
-      userPermissions = data || {};
-      console.debug('[Attendance] loaded userPermissions', userPermissions);
-    }).fail(() => { userPermissions = {}; });
+    return $.getJSON(`${API_BASE}/get_departments.php`, data => {
+      departmentsList = normalizeDepartments(data);
+      const match = departmentsList.find(d => String(d.id) === String(user.department_id)) || null;
+
+      const pick = (row, key, def) => (row && Object.prototype.hasOwnProperty.call(row, key) ? row[key] : def);
+
+      const db_department_view = pick(match, 'department_view', null);
+      const db_can_edit = Number(pick(match, 'can_edit', 0)) || 0;
+      const db_can_view_history = Number(pick(match, 'can_view_history', 0)) || 0;
+
+      const mock_department_view = (user.department_view !== null && user.department_view !== undefined) ? user.department_view : null;
+      const mock_can_edit = (user.can_edit !== null && user.can_edit !== undefined) ? Number(user.can_edit) : null;
+      const mock_can_view_history = (user.can_view_history !== null && user.can_view_history !== undefined) ? Number(user.can_view_history) : null;
+
+      const resolved_department_view = mock_department_view !== null ? mock_department_view : db_department_view;
+      const resolved_can_edit = mock_can_edit !== null ? mock_can_edit : db_can_edit;
+      const resolved_can_view_history = mock_can_view_history !== null ? mock_can_view_history : db_can_view_history;
+
+      userPermissions = {
+        department_id: match?.id ?? user.department_id ?? null,
+        department_name: match?.name ?? null,
+        department_view: (resolved_department_view === undefined ? null : resolved_department_view),
+        can_edit: (resolved_can_edit === undefined || resolved_can_edit === null) ? 0 : Number(resolved_can_edit),
+        can_view_history: (resolved_can_view_history === undefined || resolved_can_view_history === null) ? 0 : Number(resolved_can_view_history),
+        _matched_row: match || null
+      };
+
+      console.debug('[Attendance] loadUserPermissions ->', userPermissions);
+    }).fail(() => {
+      console.warn('[Attendance] loadUserPermissions failed — fallback to empty permissions');
+      userPermissions = {};
+      departmentsList = [];
+    });
   }
 
+  // ---------- parseAllowedIds ----------
   function parseAllowedIds(raw) {
     if (raw === null || raw === undefined) return null;
+    if (Array.isArray(raw)) return raw.map(String).map(s => s.trim()).filter(Boolean);
+
+    try {
+      const maybe = typeof raw === 'string' ? raw.trim() : raw;
+      if (typeof maybe === 'string' && (maybe.startsWith('[') || maybe.startsWith('{'))) {
+        const parsedJson = JSON.parse(maybe);
+        if (Array.isArray(parsedJson)) return parsedJson.map(String).map(s => s.trim()).filter(Boolean);
+      }
+    } catch (e) { /* ignore invalid JSON */ }
+
     const s = String(raw).trim();
     if (s === '') return [];
     if (s === '0') return ['0'];
     return s.split(',').map(x => x.trim()).filter(Boolean);
   }
 
+  // ---------- departments UI ----------
   function loadDepartments() {
     return $.getJSON(`${API_BASE}/get_departments.php`, data => {
-      departmentsList = data || [];
+      departmentsList = normalizeDepartments(data);
+      console.debug('[Attendance] loadDepartments ->', departmentsList);
 
       const allowedRaw = userPermissions?.department_view;
       const parsed = parseAllowedIds(allowedRaw);
-      console.debug('[Attendance] department_view raw/parsing:', allowedRaw, parsed);
+      console.debug('[Attendance] department_view raw/parsing ->', allowedRaw, parsed);
 
       let visibleDeps = [];
-
       if (parsed === null) {
+        console.warn('[Attendance] department_view unknown -> fallback to user.department_id');
         visibleDeps = departmentsList.filter(d => String(d.id) === String(user.department_id));
-        console.warn('[Attendance] department_view missing, default to user department:', user.department_id);
       } else if (parsed.length === 1 && parsed[0] === '0') {
         visibleDeps = departmentsList.slice();
       } else if (parsed.length === 0) {
         visibleDeps = departmentsList.filter(d => String(d.id) === String(user.department_id));
-        console.warn('[Attendance] department_view empty array, default to user department');
       } else {
         const ids = new Set(parsed.map(String));
         visibleDeps = departmentsList.filter(d => ids.has(String(d.id)));
       }
 
       $departmentFilter.empty();
-      if (visibleDeps.length > 1) {
-        $departmentFilter.append(`<option value="">ทุกแผนก</option>`);
-      }
-      visibleDeps.forEach(dep => {
-        $departmentFilter.append(`<option value="${dep.id}">${dep.name}</option>`);
-      });
-
-      const hasUserDept = visibleDeps.some(d => String(d.id) === String(user.department_id));
-      if (hasUserDept) {
-        $departmentFilter.val(String(user.department_id));
-      } else if (visibleDeps.length === 1) {
-        $departmentFilter.val(String(visibleDeps[0].id));
-      }
-
+      if (visibleDeps.length > 1) $departmentFilter.append(`<option value="">ทุกแผนก</option>`);
+      visibleDeps.forEach(dep => $departmentFilter.append(`<option value="${dep.id}">${dep.name}</option>`));
+      if (visibleDeps.length > 1) $departmentFilter.val('');
+      else if (visibleDeps.length === 1) $departmentFilter.val(String(visibleDeps[0].id));
+      else $departmentFilter.val(String(user.department_id || ''));
     }).fail(() => {
       $departmentFilter.html('<option value="">ทุกแผนก</option>');
+      departmentsList = [];
     });
   }
 
   // ---------- date picker ----------
   function initDatePicker() {
     if (fp && fp.destroy) fp.destroy();
-
     fp = flatpickr('#datePicker', {
       dateFormat: 'Y-m-d',
       locale: 'th',
@@ -127,7 +169,6 @@ import MultiEditorFactory from "./MultiEditor.js";
       maxDate: new Date(),
       onChange: () => {
         editMode = false;
-        // hide multiEditor when changing date
         if (multiEditor) { try { multiEditor.hide(); } catch(e){} }
         multiEditorActive = false;
         updateButtons();
@@ -135,9 +176,7 @@ import MultiEditorFactory from "./MultiEditor.js";
       },
       onDayCreate: (_, __, ___, dayElem) => {
         try {
-          if (datesWithData.has(formatDateKey(dayElem.dateObj))) {
-            dayElem.classList.add('has-data');
-          }
+          if (datesWithData.has(formatDateKey(dayElem.dateObj))) dayElem.classList.add('has-data');
         } catch (e) { console.warn('onDayCreate', e); }
       }
     });
@@ -148,11 +187,9 @@ import MultiEditorFactory from "./MultiEditor.js";
     if (!editedData[userId]) editedData[userId] = {};
     editedData[userId][field] = value;
   }
-
   function applyDrafts() {
     Object.entries(editedData).forEach(([uid, fields]) => {
       Object.entries(fields).forEach(([field, val]) => {
-        // radio group special-case
         if (field === 'ot_result') {
           const name = `ot_result_${uid}`;
           $(`[name="${name}"]`).prop('checked', false);
@@ -160,86 +197,52 @@ import MultiEditorFactory from "./MultiEditor.js";
           $(`[name="${name}"][value="${val}"]`).prop('checked', true);
         } else {
           const $el = $(`[data-user="${uid}"].${field}`);
-          if ($el.length && $el.is(':checkbox')) {
-            $el.prop('checked', !!val);
-          } else if ($el.length) {
-            $el.val(val);
-          }
+          if ($el.length && $el.is(':checkbox')) $el.prop('checked', !!val);
+          else if ($el.length) $el.val(val);
         }
       });
     });
   }
 
-  // ---------- formatters ----------
+  // ---------- formatters (exposed on window) ----------
   window.presentFormatter = (v, row) => {
     const checked = (editedData[row.user_id]?.present ?? v) == 1 ? 'checked' : '';
-    return `<input type="checkbox" class="form-check-input present-checkbox present"
-            data-user="${row.user_id}" ${checked} ${editMode?'':'disabled'}>`;
+    return `<input type="checkbox" class="form-check-input present-checkbox present" data-user="${row.user_id}" ${checked} ${editMode ? '' : 'disabled'}>`;
   };
-
   window.clockInFormatter = (v,row) => {
-    const value = editedData[row.user_id]?.clock_in ?? (v ? v.substring(0,5) : '08:00');
-    return editMode
-      ? `<input type="text" class="form-control form-control-sm time-input clock_in"
-                data-user="${row.user_id}" value="${value}">`
-      : formatTimeCell(value);
+    const value = editedData[row.user_id]?.clock_in ?? (v ? String(v).substring(0,5) : '08:00');
+    return editMode ? `<input type="text" class="form-control form-control-sm time-input clock_in" data-user="${row.user_id}" value="${value}">` : formatTimeCell(value);
   };
-
   window.clockOutFormatter = (v,row) => {
-    const value = editedData[row.user_id]?.clock_out ?? (v ? v.substring(0,5) : '17:00');
-    return editMode
-      ? `<input type="text" class="form-control form-control-sm time-input clock_out"
-                data-user="${row.user_id}" value="${value}">`
-      : formatTimeCell(value);
+    const value = editedData[row.user_id]?.clock_out ?? (v ? String(v).substring(0,5) : '17:00');
+    return editMode ? `<input type="text" class="form-control form-control-sm time-input clock_out" data-user="${row.user_id}" value="${value}">` : formatTimeCell(value);
   };
-
-  window.otStartFormatter = (v,row)=> {
-    const value = editedData[row.user_id]?.ot_start ?? (v ? v.substring(0,5) : '');
-    return editMode
-      ? `<input type="text" class="form-control form-control-sm ot-input ot-start ot_start"
-              data-user="${row.user_id}" value="${value}">`
-      : formatTimeCell(value);
+  window.otStartFormatter = (v,row) => {
+    const value = editedData[row.user_id]?.ot_start ?? (v ? String(v).substring(0,5) : '');
+    return editMode ? `<input type="text" class="form-control form-control-sm ot-input ot-start ot_start" data-user="${row.user_id}" value="${value}">` : formatTimeCell(value);
   };
-
-  window.otEndFormatter = (v,row)=> {
-    const value = editedData[row.user_id]?.ot_end ?? (v ? v.substring(0,5) : '');
-    return editMode
-      ? `<input type="text" class="form-control form-control-sm ot-input ot-end ot_end"
-              data-user="${row.user_id}" value="${value}">`
-      : formatTimeCell(value);
+  window.otEndFormatter = (v,row) => {
+    const value = editedData[row.user_id]?.ot_end ?? (v ? String(v).substring(0,5) : '');
+    return editMode ? `<input type="text" class="form-control form-control-sm ot-input ot-end ot_end" data-user="${row.user_id}" value="${value}">` : formatTimeCell(value);
   };
-
   window.breakMinutesFormatter = (v,row) => {
     const value = editedData[row.user_id]?.ot_minutes ?? (v ?? '');
-    return editMode
-      ? `<input type="number" min="0" class="form-control form-control-sm ot-input ot-minutes ot_minutes"
-             data-user="${row.user_id}" value="${value}">`
-      : (value !== '' && value !== null ? `<div class="text-center">${value}</div>` : '');
+    return editMode ? `<input type="number" min="0" class="form-control form-control-sm ot-input ot-minutes ot_minutes" data-user="${row.user_id}" value="${value}">` : (value !== '' && value !== null ? `<div class="text-center">${value}</div>` : '');
   };
-
-  window.otTaskFormatter = (v,row)=> {
+  window.otTaskFormatter = (v,row) => {
     const value = editedData[row.user_id]?.ot_task ?? v ?? '';
-    return editMode
-      ? `<input type="text" class="form-control form-control-sm ot-input ot-task ot_task"
-              data-user="${row.user_id}" value="${value}">`
-      : $('<div>').text(value).html();
+    return editMode ? `<input type="text" class="form-control form-control-sm ot-input ot-task ot_task" data-user="${row.user_id}" value="${$('<div>').text(value).html()}">` : $('<div>').text(value).html();
   };
-
   window.productCountFormatter = (v,row) => {
     const value = editedData[row.user_id]?.product_count ?? (v ?? '');
-    return editMode
-      ? `<input type="number" min="0" class="form-control form-control-sm ot-input product-count product_count"
-             data-user="${row.user_id}" value="${value}">`
-      : (value !== '' && value !== null ? `<div class="text-center">${value}</div>` : '');
+    return editMode ? `<input type="number" min="0" class="form-control form-control-sm ot-input product-count product_count" data-user="${row.user_id}" value="${value}">` : (value !== '' && value !== null ? `<div class="text-center">${value}</div>` : '');
   };
-
   window.otResultFormatter = (v,row) => {
     const cur = (editedData[row.user_id]?.ot_result ?? (v === null || v === undefined ? '' : String(v)));
-    const checkedVal = (cur === '' || cur === null) ? null : String(cur);
     if (editMode) {
       const uid = row.user_id;
-      const val1 = checkedVal === '1' ? 'checked' : '';
-      const val0 = checkedVal === '0' ? 'checked' : '';
+      const val1 = cur === '1' ? 'checked' : '';
+      const val0 = cur === '0' ? 'checked' : '';
       return `<div class="d-flex gap-2 justify-content-center">
         <div class="form-check form-check-inline">
           <input class="form-check-input ot-result radio-yes" type="radio" name="ot_result_${uid}" value="1" data-user="${uid}" ${val1}>
@@ -256,15 +259,11 @@ import MultiEditorFactory from "./MultiEditor.js";
       return '';
     }
   };
-
-  window.notesFormatter = (v,row)=> {
+  window.notesFormatter = (v,row) => {
     const value = editedData[row.user_id]?.notes ?? v ?? '';
-    return editMode
-      ? `<textarea class="notes-editor notes" data-user="${row.user_id}">${$('<div>').text(value).html()}</textarea>`
-      : $('<div>').text(value).html();
+    return editMode ? `<textarea class="notes-editor notes" data-user="${row.user_id}">${$('<div>').text(value).html()}</textarea>` : $('<div>').text(value).html();
   };
-
-  window.dateModifiedFormatter = (v)=> formatDateTimeCell(v);
+  window.dateModifiedFormatter = v => formatDateTimeCell(v);
 
   // ---------- bootstrap-table options ----------
   const tableOptions = {
@@ -278,35 +277,32 @@ import MultiEditorFactory from "./MultiEditor.js";
     showExport: true,
     exportTypes: ['excel','csv','txt'],
     toolbar: '#customToolbar',
-    queryParams: p => ({
-      ...p,
-      date: $datePicker.val(),
-      department_id: $departmentFilter.val(),
-      allowed_departments: userPermissions?.department_view || "0"
-    }),
+    maintainSelected: true,
+    queryParams: p => ({ ...p, date: $datePicker.val(), department_id: $departmentFilter.val(), allowed_departments: userPermissions?.department_view || "0" }),
     responseHandler: res => {
       (res.rows || []).forEach(r => {
         r.date_work = $datePicker.val();
         r.present_text = (Number(r.present) === 1) ? 'มา' : '';
-        r.ot_result_text = (Number(r.ot_result) === 1) ? 'ได้ตามเป้า' : 'ไม่ได้ตามเป้า';
-        r.clock_in = r.clock_in ? String(r.clock_in).substring(0,5) : '08:00';
-        r.clock_out = r.clock_out ? String(r.clock_out).substring(0,5) : '17:00';
+        r.ot_result_text = (r.ot_result === null || r.ot_result === undefined) ? '' : (Number(r.ot_result) === 1 ? 'ได้ตามเป้า' : 'ไม่ได้ตามเป้า');
+        r.clock_in = r.clock_in ? String(r.clock_in).substring(0,5) : null;
+        r.clock_out = r.clock_out ? String(r.clock_out).substring(0,5) : null;
         r.ot_start = r.ot_start ? String(r.ot_start).substring(0,5) : null;
         r.ot_end = r.ot_end ? String(r.ot_end).substring(0,5) : null;
       });
 
+      // build originalData preserving nulls
       originalData = {};
       (res.rows || []).forEach(r => {
         originalData[r.user_id] = {
-          present: Number(r.present ?? 0),
-          clock_in: r.clock_in ? String(r.clock_in) : null,
-          clock_out: r.clock_out ? String(r.clock_out) : null,
-          ot_start: r.ot_start ? String(r.ot_start) : null,
-          ot_end:   r.ot_end   ? String(r.ot_end)   : null,
-          ot_task: r.ot_task || null,
-          ot_result: Number(r.ot_result ?? 0),
-          ot_approver_id: r.ot_approver_id ? Number(r.ot_approver_id) : null,
-          notes: r.notes || null,
+          present: (r.present !== undefined && r.present !== null) ? Number(r.present) : null,
+          clock_in: (r.clock_in !== undefined && r.clock_in !== null) ? String(r.clock_in) : null,
+          clock_out: (r.clock_out !== undefined && r.clock_out !== null) ? String(r.clock_out) : null,
+          ot_start: (r.ot_start !== undefined && r.ot_start !== null) ? String(r.ot_start) : null,
+          ot_end: (r.ot_end !== undefined && r.ot_end !== null) ? String(r.ot_end) : null,
+          ot_task: r.ot_task !== undefined ? (r.ot_task === null ? null : r.ot_task) : null,
+          ot_result: (r.ot_result !== undefined && r.ot_result !== null) ? Number(r.ot_result) : null,
+          ot_approver_id: r.ot_approver_id !== undefined && r.ot_approver_id !== null ? Number(r.ot_approver_id) : null,
+          notes: r.notes !== undefined ? (r.notes === null ? null : r.notes) : null,
           ot_minutes: r.ot_minutes !== undefined ? (r.ot_minutes === null ? null : Number(r.ot_minutes)) : null,
           product_count: r.product_count !== undefined ? (r.product_count === null ? null : Number(r.product_count)) : null
         };
@@ -316,7 +312,6 @@ import MultiEditorFactory from "./MultiEditor.js";
     },
     rowStyle: () => ({ classes: 'employee-row' }),
     onPostBody: () => {
-      // initialize editors when in editmode
       if (editMode) {
         initOTInputs();
         applyDrafts();
@@ -324,69 +319,51 @@ import MultiEditorFactory from "./MultiEditor.js";
       } else {
         $table.find('input,textarea').off('input change');
       }
-      // ensure checkboxes enabled/disabled according to MultiEditor state
       setSelectionEnabled(!!(editMode && multiEditorActive));
     }
   };
 
   // ---------- table init / refresh ----------
   function initTable() {
+    try { $table.off('.attendance'); } catch(e){}
     if (!$table.data('bootstrap.table')) {
       $table.bootstrapTable(tableOptions);
 
-      // attach selection events (bootstrap-table events)
-      $table.on('check.bs.table', function (e, row) {
+      // selection handlers (namespaced)
+      $table.on('check.bs.table.attendance', (e, row) => {
         if (!multiEditorActive) {
-          // prevent selection if multi editor not active
-          try { $table.bootstrapTable('uncheck', row); } catch(e) {}
+          try {
+            if (row && row.user_id !== undefined) $table.bootstrapTable('uncheckBy', { field: 'user_id', values: [row.user_id] });
+            else $table.bootstrapTable('uncheckAll');
+          } catch(e){}
           return;
         }
         if (row && row.user_id) selectedRows.add(Number(row.user_id));
       });
-      $table.on('uncheck.bs.table', function (e, row) {
-        if (!multiEditorActive) return;
-        if (row && row.user_id) selectedRows.delete(Number(row.user_id));
-      });
-      $table.on('check-all.bs.table', function (e, rows) {
-        if (!multiEditorActive) {
-          try { $table.bootstrapTable('uncheckAll'); } catch(e) {}
-          return;
-        }
+      $table.on('uncheck.bs.table.attendance', (e, row) => { if (!multiEditorActive) return; if (row && row.user_id) selectedRows.delete(Number(row.user_id)); });
+      $table.on('check-all.bs.table.attendance', (e, rows) => {
+        if (!multiEditorActive) { try { $table.bootstrapTable('uncheckAll'); } catch(e){}; return; }
         (rows || []).forEach(r => { if (r && r.user_id) selectedRows.add(Number(r.user_id)); });
       });
-      $table.on('uncheck-all.bs.table', function (e, rows) {
-        if (!multiEditorActive) return;
-        (rows || []).forEach(r => { if (r && r.user_id) selectedRows.delete(Number(r.user_id)); });
-      });
+      $table.on('uncheck-all.bs.table.attendance', (e, rows) => { if (!multiEditorActive) return; (rows || []).forEach(r => { if (r && r.user_id) selectedRows.delete(Number(r.user_id)); }); });
 
-      // after initial load, ensure column visibility according to editMode
-      $table.on('load-success.bs.table', function () {
-        try {
-          if (editMode) $table.bootstrapTable('showColumn', 'state');
-          else $table.bootstrapTable('hideColumn', 'state');
-        } catch (e) { /* ignore */ }
+      $table.on('load-success.bs.table.attendance', () => {
+        try { if (editMode) $table.bootstrapTable('showColumn', 'state'); else $table.bootstrapTable('hideColumn', 'state'); } catch (e) {}
       });
-
     } else {
       $table.bootstrapTable('refreshOptions', tableOptions);
     }
   }
   function loadAttendance() {
-    if ($table.data('bootstrap.table')) {
-      $table.bootstrapTable('refresh', { silent: true });
-    } else {
-      initTable();
-    }
+    if ($table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true });
+    else initTable();
   }
 
   // ---------- in-row editors ----------
   function initOTInputs() {
-    // time pickers: clock_in, clock_out, ot-start, ot-end
     $('.time-input, .ot-start, .ot-end').each(function () {
       if (!$(this).data('flat')) {
-        try {
-          flatpickr(this, { enableTime:true, noCalendar:true, dateFormat:'H:i', time_24hr:true });
-        } catch(e) { /* ignore */ }
+        try { flatpickr(this, { enableTime:true, noCalendar:true, dateFormat:'H:i', time_24hr:true }); } catch(e) {}
         $(this).data('flat', true);
       }
     });
@@ -405,126 +382,96 @@ import MultiEditorFactory from "./MultiEditor.js";
       $i.trigger('change');
     });
 
-    // change event tracking (including radio)
-    $table.find('input,textarea').off('input change').on('input change', function() {
+    $table.find('input,textarea').off('input.changeKey').on('input.changeKey change.changeKey', function() {
       const uid = $(this).data('user');
-      // detect field class
       const classes = (this.className || '').split(' ');
       let field = classes.find(c => ['present','clock_in','clock_out','ot_start','ot_end','ot_task','ot_result','notes','ot_minutes','product_count'].includes(c));
-      // radio inputs fallback
-      if (!field && $(this).is(':radio') && (this.name || '').startsWith('ot_result_')) {
-        field = 'ot_result';
-      }
+      if (!field && $(this).is(':radio') && (this.name || '').startsWith('ot_result_')) field = 'ot_result';
       if (!field) return;
       let val;
       if ($(this).is(':checkbox')) {
-        if ($(this).hasClass('present-checkbox')) {
-          val = $(this).prop('checked') ? 1 : 0;
-        } else {
-          return;
-        }
+        if ($(this).hasClass('present-checkbox')) val = $(this).prop('checked') ? 1 : 0;
+        else return;
       } else if ($(this).is(':radio')) {
-        val = $(this).val();
-        if (val !== undefined) val = Number(val);
-      } else {
-        val = $(this).val();
-      }
+        val = $(this).val(); if (val !== undefined) val = Number(val);
+      } else val = $(this).val();
       saveDraft(uid, field, val);
     });
   }
 
-  // apply selections (programmatically check rows whose user_id in selectedRows)
   function applySelections() {
     try {
       const vals = Array.from(selectedRows);
-      if (!vals.length) {
-        $table.bootstrapTable('uncheckAll');
-        return;
-      }
+      if (!vals.length) { $table.bootstrapTable('uncheckAll'); return; }
       $table.bootstrapTable('uncheckAll');
       $table.bootstrapTable('checkBy', { field: 'user_id', values: vals });
-    } catch (e) {
-      console.warn('applySelections failed', e);
-    }
+    } catch (e) { console.warn('applySelections failed', e); }
   }
 
   // ---------- UI buttons ----------
   function updateButtons() {
-    $('#btnEdit').toggleClass('d-none', editMode);
-    $('#btnSave, #btnCancel').toggleClass('d-none', !editMode);
-    $btnTogglePresent.toggleClass('d-none', !editMode);
-    $btnMultiEditor.toggleClass('d-none', !editMode);
-
-    if (!editMode) {
-      // hide multiEditor when leaving edit mode
-      multiEditorActive = false;
-      if (multiEditor) try { multiEditor.hide(); } catch(e){}
-      $btnMultiEditor.removeClass('active');
-      setSelectionEnabled(false);
-    }
-
-    if ($table.data('bootstrap.table')) {
-      try {
-        if (editMode) {
-          $table.bootstrapTable('showColumn', 'state');
-        } else {
-          $table.bootstrapTable('hideColumn', 'state');
-        }
-      } catch (e) {
-        console.warn('show/hide column failed', e);
+    try {
+      if (editMode) {
+        $('#btnEdit').addClass('d-none').hide();
+        $('#btnSave, #btnCancel').removeClass('d-none').show();
+        $btnTogglePresent.removeClass('d-none').show();
+        $btnMultiEditor.removeClass('d-none').show();
+        if ($table.data('bootstrap.table')) try { $table.bootstrapTable('showColumn', 'state'); } catch (e) {}
+      } else {
+        $('#btnSave, #btnCancel').addClass('d-none').hide();
+        $btnTogglePresent.addClass('d-none').hide();
+        $btnMultiEditor.addClass('d-none').hide();
+        if ($table.data('bootstrap.table')) try { $table.bootstrapTable('hideColumn', 'state'); } catch (e) {}
+        applyPermissions();
       }
-      $table.bootstrapTable('refresh', { silent: true });
-    }
+      if ($table.data('bootstrap.table')) try { $table.bootstrapTable('refresh', { silent: true }); } catch(e) {}
+    } catch (e) { console.warn('updateButtons failed', e); }
   }
 
-  // ---------- role / permission ----------
+  // ---------- permissions (single implementation) ----------
   function applyPermissions() {
-    const permDeptCanEdit = !!(userPermissions && (String(userPermissions.can_edit) === '1' || Number(userPermissions.can_edit) === 1 || userPermissions.can_edit === true));
-    const permDeptCanViewHistory = !!(userPermissions && (String(userPermissions.can_view_history) === '1' || Number(userPermissions.can_view_history) === 1 || userPermissions.can_view_history === true));
-
-    const isAdmin = !!(user && (String(user.is_admin) === '1' || user.is_admin === true));
-    const isManager = !!(user && (String(user.is_manager) === '1' || user.is_manager === true));
-    const userCanEdit = !!(user && (String(user.can_edit) === '1' || user.can_edit === true));
-    const userCanViewHistory = !!(user && (String(user.can_view_history) === '1' || user.can_view_history === true));
-
-    const selectedDeptId = $departmentFilter.val();
-    const deptRow = departmentsList.find(d => String(d.id) === String(selectedDeptId)) || null;
-    const selectedDeptCanEdit = !!(deptRow && (String(deptRow.can_edit) === '1' || Number(deptRow.can_edit) === 1 || deptRow.can_edit === true));
-    const selectedDeptCanViewHistory = !!(deptRow && (String(deptRow.can_view_history) === '1' || Number(deptRow.can_view_history) === 1 || deptRow.can_view_history === true));
-
-    const managerOfSelected = isManager && selectedDeptId && String(user.department_id) === String(selectedDeptId);
-
-    const allowEdit = isAdmin || userCanEdit || permDeptCanEdit || selectedDeptCanEdit || managerOfSelected;
-    const allowHistory = isAdmin || userCanViewHistory || permDeptCanViewHistory || selectedDeptCanViewHistory;
-
-    if (allowEdit) {
-      $('#btnEdit, #btnSave, #btnCancel').show();
-    } else {
-      $('#btnEdit, #btnSave, #btnCancel').hide();
+    if (!userPermissions) {
+      console.warn('[Attendance] applyPermissions: userPermissions undefined -> hiding controls by default');
+      $('#btnEdit').addClass('d-none').hide();
+      $('#navHistoryLink, a[data-page="page/History/History.php"]').addClass('d-none').hide();
+      return;
     }
 
-    if (allowHistory) $('a[href="../History/History.php"]').show(); else $('a[href="../History/History.php"]').hide();
+    const canEditUser = Number(userPermissions.can_edit || 0) === 1;
+    const canViewHistoryUser = Number(userPermissions.can_view_history || 0) === 1;
 
-    console.debug('[Attendance] permission eval', { user, userPermissions, selectedDeptId, selectedDeptCanEdit, allowEdit, allowHistory, managerOfSelected });
+    const rawSelected = $departmentFilter.val();
+    const selectedDeptId = (rawSelected && String(rawSelected).length) ? String(rawSelected) : String(userPermissions.department_id ?? user.department_id ?? '');
+    const deptRow = departmentsList.find(d => String(d.id) === String(selectedDeptId)) || null;
+
+    const selectedDeptCanEdit = !!(deptRow && Number(deptRow.can_edit || 0) === 1);
+    const selectedDeptCanViewHistory = !!(deptRow && Number(deptRow.can_view_history || 0) === 1);
+
+    const allowEdit = canEditUser || selectedDeptCanEdit;
+    const allowHistory = canViewHistoryUser || selectedDeptCanViewHistory;
+
+    console.debug('[Attendance] applyPermissions ->', { userPermissions, selectedDeptId, deptRow, allowEdit, allowHistory });
+
+    if (allowEdit) $('#btnEdit').removeClass('d-none').show();
+    else { $('#btnEdit').addClass('d-none').hide(); if (editMode) { editMode = false; updateButtons(); } }
+
+    const $historyById = $('#navHistoryLink');
+    const $historyByAttr = $('a[data-page="page/History/History.php"]');
+    if (allowHistory) { if ($historyById.length) $historyById.removeClass('d-none').show(); if ($historyByAttr.length) $historyByAttr.removeClass('d-none').show(); }
+    else { if ($historyById.length) $historyById.addClass('d-none').hide(); if ($historyByAttr.length) $historyByAttr.addClass('d-none').hide(); }
   }
+
+  // default hide (on boot)
+  $('#btnEdit').addClass('d-none').hide();
+  $('#btnSave, #btnCancel').addClass('d-none').hide();
+  $('#navHistoryLink, a[data-page="page/History/History.php"]').addClass('d-none').hide();
 
   // ---------- events ----------
-  $('#btnEdit').on('click', () => {
-    editMode = true;
-    updateButtons();
-    initOTInputs();
-    applyDrafts();
-    applySelections();
-  });
+  $('#btnEdit').on('click', () => { editMode = true; updateButtons(); initOTInputs(); applyDrafts(); applySelections(); });
   $('#btnCancel').on('click', () => {
-    editMode = false;
-    editedData = {};
-    // hide multi editor when cancelling
-    multiEditorActive = false;
+    editMode = false; editedData = {}; multiEditorActive = false;
     if (multiEditor) try { multiEditor.hide(); } catch(e){}
-    $btnMultiEditor.removeClass('active');
-    updateButtons();
-    loadAttendance();
+    $btnMultiEditor.removeClass('active'); updateButtons(); loadAttendance();
   });
   $('#btnSave').on('click', saveAttendance);
 
@@ -538,14 +485,8 @@ import MultiEditorFactory from "./MultiEditor.js";
   $btnMultiEditor.on('click', () => {
     if (!editMode) return;
     multiEditorActive = !multiEditorActive;
-    if (multiEditorActive) {
-      try { if (multiEditor) multiEditor.show(); } catch(e){}
-      $btnMultiEditor.addClass('active');
-    } else {
-      try { if (multiEditor) multiEditor.hide(); } catch(e){}
-      $btnMultiEditor.removeClass('active');
-    }
-    // enable/disable checkboxes based on multiEditor state
+    if (multiEditorActive) { try { if (multiEditor) multiEditor.show(); } catch(e){} $btnMultiEditor.addClass('active'); }
+    else { try { if (multiEditor) multiEditor.hide(); } catch(e){} $btnMultiEditor.removeClass('active'); }
     setSelectionEnabled(!!(editMode && multiEditorActive));
   });
 
@@ -554,10 +495,7 @@ import MultiEditorFactory from "./MultiEditor.js";
     window.location.href = url;
   });
 
-  $departmentFilter.on('change', () => {
-    loadAttendance();
-    applyPermissions();
-  });
+  $departmentFilter.on('change', () => { loadAttendance(); applyPermissions(); });
 
   // ---------- save ----------
   function saveAttendance() {
@@ -567,8 +505,7 @@ import MultiEditorFactory from "./MultiEditor.js";
     Object.entries(editedData).forEach(([uid, fields]) => {
       const orig = originalData[uid] || {};
       const changed = Object.keys(fields).some(f => {
-        const a = fields[f];
-        const b = orig[f];
+        const a = fields[f]; const b = orig[f];
         if ((a === '' || a === null || a === undefined) && (b === '' || b === null || b === undefined)) return false;
         return String(a) !== String(b);
       });
@@ -583,12 +520,9 @@ import MultiEditorFactory from "./MultiEditor.js";
 
     if (records.length === 0) {
       alert('ไม่มีการเปลี่ยนแปลง');
-      editMode = false;
-      // hide multi editor when save finishes with no change
-      multiEditorActive = false;
+      editMode = false; multiEditorActive = false;
       if (multiEditor) try { multiEditor.hide(); } catch(e){}
-      $btnMultiEditor.removeClass('active');
-      updateButtons();
+      $btnMultiEditor.removeClass('active'); updateButtons();
       return;
     }
 
@@ -599,19 +533,12 @@ import MultiEditorFactory from "./MultiEditor.js";
       data: JSON.stringify({ date, records }),
       success: resp => {
         if (resp.status === 'ok') {
-          editMode = false;
-          editedData = {};
-          // hide multi editor after save
-          multiEditorActive = false;
+          editMode = false; editedData = {}; multiEditorActive = false;
           if (multiEditor) try { multiEditor.hide(); } catch(e){}
-          $btnMultiEditor.removeClass('active');
-          updateButtons();
-          loadAttendance();
+          $btnMultiEditor.removeClass('active'); updateButtons(); loadAttendance();
           loadDatesWithData().always(() => { if (fp && fp.redraw) fp.redraw(); });
           alert('บันทึกเรียบร้อย');
-        } else {
-          alert('เกิดข้อผิดพลาด: ' + (resp.message || 'ไม่ทราบสาเหตุ'));
-        }
+        } else alert('เกิดข้อผิดพลาด: ' + (resp.message || 'ไม่ทราบสาเหตุ'));
       },
       error: () => alert('บันทึกไม่สำเร็จ')
     });
@@ -625,40 +552,60 @@ import MultiEditorFactory from "./MultiEditor.js";
       ['present','clock_in','clock_out','ot_start','ot_end','ot_minutes','ot_task','product_count','ot_result','notes'].forEach(k => {
         if (rec.hasOwnProperty(k)) editedData[uid][k] = rec[k];
       });
-      // mark row selected for visual feedback
       selectedRows.add(Number(uid));
     });
-
-    applyDrafts();
-    initOTInputs();
-    applySelections();
+    applyDrafts(); initOTInputs(); applySelections();
   }
 
   // ---------- boot ----------
   $(function () {
     console.debug('[Attendance] user loaded (from MockUser):', user);
+    $('#btnEdit, #btnSave, #btnCancel').hide();
+    $('a[data-page="page/History/History.php"]').hide();
+
+    window._debug_permissions = function() {
+      console.debug('[Attendance] DEBUG -> mock user:', user);
+      console.debug('[Attendance] DEBUG -> userPermissions:', userPermissions);
+      console.debug('[Attendance] DEBUG -> departmentsList:', departmentsList);
+      console.debug('[Attendance] DEBUG -> selectedRows:', Array.from(selectedRows));
+    };
+
     $.when(loadUserPermissions()).then(() => {
       $.when(loadDatesWithData(), loadDepartments()).always(() => {
         if (!$datePicker.val()) $datePicker.val(today());
-        initDatePicker();
-        initTable();
-        applyPermissions();
+        initDatePicker(); initTable(); applyPermissions();
 
-        // init MultiEditor instance
+        // init MultiEditor
         try {
           multiEditor = MultiEditorFactory();
           multiEditor.init({ containerSelector: '#pageContent', tableSelector: '#attendanceTable', applyCallback: handleMultiEditorApply });
+
+          if (multiEditor && typeof multiEditor.onSelectionChange === 'function') {
+            let _selChangeTimer = null;
+            multiEditor.onSelectionChange(keys => {
+              selectedRows = new Set((keys || []).map(k => Number(k)));
+              if (_selChangeTimer) clearTimeout(_selChangeTimer);
+              _selChangeTimer = setTimeout(() => { _selChangeTimer = null; try { applySelections(); } catch(e){ console.warn('applySelections failed', e); } }, 40);
+            });
+          }
+
+          // when multiEditor shown, sync keys back
+          $(document).on('multiEditor:shown', () => {
+            if (typeof multiEditor.setSelectedKeys === 'function') {
+              setTimeout(() => {
+                try { multiEditor.setSelectedKeys(Array.from(selectedRows).map(x => String(x))); }
+                catch(e){ console.warn('setSelectedKeys failed', e); }
+              }, 50);
+            }
+          });
+
         } catch(e) { console.warn('MultiEditor init failed', e); }
 
-        // hide multieditor when external hide event or when clearing edit mode
+        // external hide/show handlers
         $(document).on('multiEditor:hidden', () => {
-          multiEditorActive = false;
-          $btnMultiEditor.removeClass('active');
-          setSelectionEnabled(false);
+          multiEditorActive = false; $btnMultiEditor.removeClass('active'); setSelectionEnabled(false);
         });
-        $(document).on('multiEditor:shown', () => {
-          setSelectionEnabled(!!(editMode && multiEditorActive));
-        });
+        $(document).on('multiEditor:shown', () => setSelectionEnabled(!!(editMode && multiEditorActive)));
 
       });
     });
@@ -668,6 +615,8 @@ import MultiEditorFactory from "./MultiEditor.js";
   try {
     window._attendance_cleanup = function() {
       if (multiEditor) { try { multiEditor.hide(); } catch(e){} }
+      try { $table.off('.attendance'); } catch(e){}
+      $(document).off('multiEditor:hidden multiEditor:shown');
     };
   } catch(e){}
 
