@@ -1,21 +1,26 @@
+/* attendance.css
+   แยกจาก Attendance.php - ปรับขนาดคอลัมน์ / responsive / styles ที่เกี่ยวข้อง
+*/
+
 /* ============ Layout ============ */
 .table-container {
-  max-width: 1500px;
+  max-width: 1900px; /* ขยายสูงสุด */
   margin: 0;
   padding: 0;
+  overflow-x: auto; /* ถ้าคอลัมน์เยอะ ให้เลื่อนแนวนอนแทนยุบคอลัมน์ */
 }
 
 /* Input sizes */
-.ot-input { width: 110px; }
+.ot-input { width: 140px; }
 @media (max-width: 768px) {
-  .ot-input { width: 90px; }
+  .ot-input { width: 110px; }
   .custom-filter { width: 100%; margin-top: .5rem; }
 }
-
+  
 /* Checkboxes */
 .present-checkbox {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   vertical-align: middle;
 }
 
@@ -24,10 +29,15 @@
   text-align: center !important;
   width: 100%;
   display: inline-block;
+  white-space: nowrap; /* ป้องกัน header ห่อบรรทัด */
 }
 
 /* จัด cell กลุ่มที่ต้องการชิดซ้าย/กลาง */
-.bootstrap-table td { vertical-align: middle; }
+.bootstrap-table td {
+  vertical-align: middle;
+  word-break: break-word;
+  white-space: normal; /* ให้ cell ห่อข้อความได้ */
+}
 .bootstrap-table td .text-center { margin: 0 auto; }
 
 /* Row styles */
@@ -40,7 +50,6 @@
 .bootstrap-table .manager-row td { color: #c82333; font-weight: 700; }
 .bootstrap-table .manager-muted td { color: #6c757d; }
 .bootstrap-table .employee-row td { padding-left: 1rem; }
-
 
 /* Notes */
 .notes-editor {
@@ -60,22 +69,46 @@
 
 /* Calendar highlight */
 .flatpickr-day.has-data {
-  background-color: #eef9ff !important;
-  border-radius: 6px;
-  color: #000 !important;
   position: relative;
+  background-color: #f0f7ff !important; /* ฟ้าอ่อนนวล */
+  border-radius: 8px;
+  font-weight: 600;
+  color: #0d6efd !important; /* text น้ำเงิน */
+  transition: all 0.2s ease-in-out;
 }
 
+/* Hover effect */
+.flatpickr-day.has-data:hover {
+  background-color: #d9ebff !important;
+  color: #084298 !important;
+}
+
+/* จุดเล็กบอกว่ามี data */
 .flatpickr-day.has-data::after {
   content: "";
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #007bff;
+  background: #0d6efd;
   position: absolute;
   left: 50%;
-  bottom: 6px;
+  bottom: 4px;
   transform: translateX(-50%);
+}
+
+/* ถ้าเป็นวันปัจจุบัน + มี data */
+.flatpickr-day.today.has-data {
+  border: 2px solid #0d6efd !important;
+  background-color: #e7f1ff !important;
+}
+
+/* ถ้าเลือกวัน (selected) */
+.flatpickr-day.selected.has-data {
+  background-color: #0d6efd !important;
+  color: #fff !important;
+}
+.flatpickr-day.selected.has-data::after {
+  background: #fff;
 }
 
 
@@ -102,3 +135,28 @@
   50% { opacity: 1; transform: scale(1.2); }
   100% { opacity: .2; transform: scale(.8); }
 }
+
+/* ====== กำหนด min-width ให้คอลัมน์สำคัญ ====== */
+.bootstrap-table th[data-field="date_work"] { min-width: 100px; }
+.bootstrap-table th[data-field="employee_code"] { min-width: 80px; }
+.bootstrap-table th[data-field="department_name"] { min-width: 100px; }
+.bootstrap-table th[data-field="manager_name"] { min-width: 150px; }
+.bootstrap-table th[data-field="present"] { min-width: 50px; }
+
+/* ชื่อ-นามสกุล */
+.bootstrap-table th[data-field="full_name"] { min-width: 150px; }
+
+/* งาน / OT / Product */
+.bootstrap-table th[data-field="ot_task"] { min-width: 160px; } 
+.bootstrap-table th[data-field="product_count"] { min-width: 120px; }
+
+/* หมายเหตุ */
+.bootstrap-table th[data-field="notes"] { min-width: 200px; } 
+
+/* OT เวลา */
+.bootstrap-table th[data-field="ot_start"],
+.bootstrap-table th[data-field="ot_end"] { min-width: 120px; }
+.bootstrap-table th[data-field="ot_minutes"] { min-width: 100px; }
+.bootstrap-table th[data-field="ot_result"] { min-width: 200px; }
+.bootstrap-table th[data-field="ot_approver"] { min-width: 200px; }
+.bootstrap-table th[data-field="date_modified"] { min-width: 100px; }

@@ -72,8 +72,8 @@
       <th data-field="ot_start" data-formatter="otStartFormatter" data-sortable="true" data-align="center" data-halign="center">OT (เริ่ม)</th>
       <th data-field="ot_end" data-formatter="otEndFormatter" data-sortable="true" data-align="center" data-halign="center">OT (สิ้นสุด)</th>
       <th data-field="ot_minutes" data-formatter="breakMinutesFormatter" data-align="center">เวลาพัก(นาที)</th>
-      <th data-field="ot_task" data-formatter="otTaskFormatter" data-align="center">คีย์อิสระ</th>
-      <th data-field="product_count" data-formatter="productCountFormatter" data-align="center">จำนวนผลผลิต</th>
+      <th data-field="ot_task" data-formatter="otTaskFormatter" data-align="center">ผลลัพธ์</th>
+      <th data-field="product_count" data-formatter="productCountFormatter" data-align="center">จำนวนผลลัพธ์</th>
 
       <!-- เก็บผลลัพธ์สำหรับ export (text) แต่ซ่อนในตารางปกติ -->
       <th data-field="ot_result_text"
@@ -86,7 +86,7 @@
           data-align="center"
           data-halign="center"
           data-sortable="true"
-          data-force-hide="true">ผลลัพธ์</th>
+          data-force-hide="true">สรุป</th>
 
       <th data-field="ot_approver" data-align="center" data-sortable="true">ผู้อนุมัติ</th>
     </tr>

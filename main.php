@@ -20,7 +20,9 @@
   <link rel="stylesheet" href="components/header.css">
 
   <!-- MultiEditor styles (page-specific) -->
+  <link rel="stylesheet" href="page/Attendance/Attendance.css">
   <link rel="stylesheet" href="page/Attendance/MultiEditor.css">
+  
 </head>
 <body class="bg-light">
 

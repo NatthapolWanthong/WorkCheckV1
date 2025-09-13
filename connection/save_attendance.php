@@ -10,12 +10,13 @@ include "dbconnect.php";
  * Helper: bind params to mysqli_stmt using call_user_func_array (needs references)
  */
 function bind_stmt_params($stmt, $types, $params) {
-    if ($params === []) {
+    if ($params === [] || $types === '') {
         return true;
     }
+    $bind_names = array();
     $bind_names[] = $types;
+    // create variables by reference
     for ($i=0; $i<count($params); $i++) {
-        // make sure each param is a variable (reference)
         $bind_name = 'bind' . $i;
         $$bind_name = $params[$i];
         $bind_names[] = &$$bind_name;
@@ -67,19 +68,18 @@ try {
     $checkStmt = mysqli_prepare($connection, "SELECT id FROM attendance_records WHERE day_id = ? AND user_id = ? LIMIT 1");
     if (!$checkStmt) throw new Exception("Prepare failed (check): " . mysqli_error($connection));
 
-    // We'll prepare generic statements inside loop as needed (UPDATE/INSERT will be dynamic per-record)
+    // helper normalizer
+    $normalize_time = function($t) {
+        if ($t === null) return null;
+        $t = trim($t);
+        if ($t === '') return null;
+        if (strlen($t) === 5) return $t . ':00';
+        return $t;
+    };
+
     foreach ($records as $rec) {
         $uid = isset($rec['user_id']) ? intval($rec['user_id']) : 0;
         if ($uid <= 0) continue;
-
-        // normalize time strings (if hh:mm -> hh:mm:00)
-        $normalize_time = function($t) {
-            if ($t === null) return null;
-            $t = trim($t);
-            if ($t === '') return null;
-            if (strlen($t) === 5) return $t . ':00';
-            return $t;
-        };
 
         // First check existence
         mysqli_stmt_bind_param($checkStmt, "ii", $day_id, $uid);
@@ -89,11 +89,11 @@ try {
         if (mysqli_stmt_fetch($checkStmt)) {
             $hasExisting = true;
         }
-        // reset result buffer
+        // free result so next fetch works
         mysqli_stmt_free_result($checkStmt);
 
         if ($hasExisting) {
-            // --- UPDATE only columns present in $rec ---
+            // --- UPDATE only columns present in $rec (partial update) ---
             $sets = [];
             $types = '';
             $params = [];
@@ -126,27 +126,36 @@ try {
             if (array_key_exists('ot_minutes', $rec)) {
                 $sets[] = "ot_minutes = ?";
                 $types .= 'i';
-                $params[] = $rec['ot_minutes'] === '' ? null : intval($rec['ot_minutes']);
+                $params[] = ($rec['ot_minutes'] === '' || $rec['ot_minutes'] === null) ? null : intval($rec['ot_minutes']);
             }
             if (array_key_exists('ot_task', $rec)) {
                 $sets[] = "ot_task = ?";
                 $types .= 's';
-                $params[] = $rec['ot_task'] === '' ? null : $rec['ot_task'];
+                $params[] = ($rec['ot_task'] === '' || $rec['ot_task'] === null) ? null : $rec['ot_task'];
             }
             if (array_key_exists('product_count', $rec)) {
                 $sets[] = "product_count = ?";
                 $types .= 'i';
-                $params[] = $rec['product_count'] === '' ? null : intval($rec['product_count']);
+                $params[] = ($rec['product_count'] === '' || $rec['product_count'] === null) ? null : intval($rec['product_count']);
             }
+
+            // ot_result: special handling
             if (array_key_exists('ot_result', $rec)) {
-                $sets[] = "ot_result = ?";
-                $types .= 'i';
-                $params[] = intval($rec['ot_result']);
+                // if explicit empty string or null -> set to SQL NULL (no bind)
+                if ($rec['ot_result'] === '' || $rec['ot_result'] === null) {
+                    $sets[] = "ot_result = NULL";
+                } else {
+                    // numeric value => bind as int
+                    $sets[] = "ot_result = ?";
+                    $types .= 'i';
+                    $params[] = intval($rec['ot_result']);
+                }
             }
+            // notes
             if (array_key_exists('notes', $rec)) {
                 $sets[] = "notes = ?";
                 $types .= 's';
-                $params[] = $rec['notes'] === '' ? null : $rec['notes'];
+                $params[] = ($rec['notes'] === '' || $rec['notes'] === null) ? null : $rec['notes'];
             }
 
             // if any of OT-related fields changed, update ot_approver_id to current user
@@ -170,6 +179,7 @@ try {
             $sets[] = "updated_at = CURRENT_TIMESTAMP";
 
             $sql = "UPDATE attendance_records SET " . implode(", ", $sets) . " WHERE day_id = ? AND user_id = ?";
+            // append where params
             $types .= "ii";
             $params[] = $day_id;
             $params[] = $uid;
@@ -188,92 +198,82 @@ try {
 
         } else {
             // --- INSERT: build columns & values, use provided values or defaults ---
-            $cols = ['day_id','user_id','present','clock_in','clock_out','ot_start','ot_end','ot_minutes','ot_task','product_count','ot_result','ot_approver_id','notes'];
+            $cols = [];
             $placeholders = [];
             $types = '';
             $params = [];
 
-            // day_id, user_id
-            $placeholders[] = '?'; $types .= 'i'; $params[] = $day_id;
-            $placeholders[] = '?'; $types .= 'i'; $params[] = $uid;
+            // mandatory day_id, user_id
+            $cols[] = 'day_id'; $placeholders[] = '?'; $types .= 'i'; $params[] = $day_id;
+            $cols[] = 'user_id'; $placeholders[] = '?'; $types .= 'i'; $params[] = $uid;
 
             // present
-            if (array_key_exists('present', $rec)) {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = intval($rec['present']);
-            } else {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = 1; // default present=1
-            }
+            $cols[] = 'present';
+            if (array_key_exists('present', $rec)) { $placeholders[] = '?'; $types .= 'i'; $params[] = intval($rec['present']); }
+            else { $placeholders[] = '?'; $types .= 'i'; $params[] = 1; }
 
             // clock_in
-            if (array_key_exists('clock_in', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['clock_in']);
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = '08:00:00';
-            }
+            $cols[] = 'clock_in';
+            if (array_key_exists('clock_in', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['clock_in']); }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = '08:00:00'; }
 
             // clock_out
-            if (array_key_exists('clock_out', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['clock_out']);
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = '17:00:00';
-            }
+            $cols[] = 'clock_out';
+            if (array_key_exists('clock_out', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['clock_out']); }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = '17:00:00'; }
 
             // ot_start
-            if (array_key_exists('ot_start', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['ot_start']);
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = null;
-            }
+            $cols[] = 'ot_start';
+            if (array_key_exists('ot_start', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['ot_start']); }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = null; }
 
             // ot_end
-            if (array_key_exists('ot_end', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['ot_end']);
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = null;
-            }
+            $cols[] = 'ot_end';
+            if (array_key_exists('ot_end', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = $normalize_time($rec['ot_end']); }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = null; }
 
             // ot_minutes
-            if (array_key_exists('ot_minutes', $rec)) {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = $rec['ot_minutes'] === '' ? null : intval($rec['ot_minutes']);
-            } else {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = null;
-            }
+            $cols[] = 'ot_minutes';
+            if (array_key_exists('ot_minutes', $rec)) { $placeholders[] = '?'; $types .= 'i'; $params[] = ($rec['ot_minutes'] === '' || $rec['ot_minutes'] === null) ? null : intval($rec['ot_minutes']); }
+            else { $placeholders[] = '?'; $types .= 'i'; $params[] = null; }
 
             // ot_task
-            if (array_key_exists('ot_task', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $rec['ot_task'] === '' ? null : $rec['ot_task'];
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = null;
-            }
+            $cols[] = 'ot_task';
+            if (array_key_exists('ot_task', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = ($rec['ot_task'] === '' || $rec['ot_task'] === null) ? null : $rec['ot_task']; }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = null; }
 
             // product_count
-            if (array_key_exists('product_count', $rec)) {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = $rec['product_count'] === '' ? null : intval($rec['product_count']);
-            } else {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = null;
-            }
+            $cols[] = 'product_count';
+            if (array_key_exists('product_count', $rec)) { $placeholders[] = '?'; $types .= 'i'; $params[] = ($rec['product_count'] === '' || $rec['product_count'] === null) ? null : intval($rec['product_count']); }
+            else { $placeholders[] = '?'; $types .= 'i'; $params[] = null; }
 
-            // ot_result
+            // ot_result -> IMPORTANT:
+            $cols[] = 'ot_result';
             if (array_key_exists('ot_result', $rec)) {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = intval($rec['ot_result']);
+                if ($rec['ot_result'] === '' || $rec['ot_result'] === null) {
+                    // insert NULL (no bind)
+                    $placeholders[] = 'NULL';
+                } else {
+                    $placeholders[] = '?';
+                    $types .= 'i';
+                    $params[] = intval($rec['ot_result']);
+                }
             } else {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = 0;
+                // if not provided => insert NULL (do not insert 0)
+                $placeholders[] = 'NULL';
             }
 
-            // ot_approver_id -> set to current user if available
-            if ($user_id !== null) {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = intval($user_id);
-            } else {
-                $placeholders[] = '?'; $types .= 'i'; $params[] = null;
-            }
+            // ot_approver_id
+            $cols[] = 'ot_approver_id';
+            if ($user_id !== null) { $placeholders[] = '?'; $types .= 'i'; $params[] = intval($user_id); }
+            else { $placeholders[] = '?'; $types .= 'i'; $params[] = null; }
 
             // notes
-            if (array_key_exists('notes', $rec)) {
-                $placeholders[] = '?'; $types .= 's'; $params[] = $rec['notes'] === '' ? null : $rec['notes'];
-            } else {
-                $placeholders[] = '?'; $types .= 's'; $params[] = null;
-            }
+            $cols[] = 'notes';
+            if (array_key_exists('notes', $rec)) { $placeholders[] = '?'; $types .= 's'; $params[] = ($rec['notes'] === '' || $rec['notes'] === null) ? null : $rec['notes']; }
+            else { $placeholders[] = '?'; $types .= 's'; $params[] = null; }
 
+            // build SQL: placeholders array may contain 'NULL' items; only '?' will be bound
             $sql = "INSERT INTO attendance_records (" . implode(',', $cols) . ") VALUES (" . implode(',', $placeholders) . ")";
             $ins = mysqli_prepare($connection, $sql);
             if (!$ins) throw new Exception("Prepare failed (insert): " . mysqli_error($connection));

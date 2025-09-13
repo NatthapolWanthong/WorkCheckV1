@@ -1,14 +1,12 @@
 
 ```
 Attendance
-├─ api
 ├─ components
 │  ├─ header.css
 │  └─ header.html
 ├─ connection
 │  ├─ dbconfig.php
 │  ├─ dbconnect.php
-│  ├─ export_attendance.php
 │  ├─ get_attendance.php
 │  ├─ get_dates.php
 │  ├─ get_departments.php
@@ -20,7 +18,9 @@ Attendance
 │  ├─ Attendance
 │  │  ├─ Attendance.css
 │  │  ├─ Attendance.js
-│  │  └─ Attendance.php
+│  │  ├─ Attendance.php
+│  │  ├─ MultiEditor.css
+│  │  └─ MultiEditor.js
 │  ├─ History
 │  │  ├─ History.css
 │  │  ├─ History.js

@@ -6,6 +6,8 @@ header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
 include "dbconnect.php";
 
+date_default_timezone_set('UTC');
+
 $date = $_GET['date'] ?? date('Y-m-d');
 $department_id = isset($_GET['department_id']) && $_GET['department_id'] !== '' ? intval($_GET['department_id']) : null;
 $allowed = $_GET['allowed_departments'] ?? "0";
@@ -24,13 +26,32 @@ mysqli_stmt_bind_result($stmt, $did);
 if (mysqli_stmt_fetch($stmt)) { $day_id = $did; }
 mysqli_stmt_close($stmt);
 
+// get day created_at (for fallback date_modified)
+$dayCreatedAt = null;
+if ($day_id) {
+    $stmtDay = mysqli_prepare($connection, "SELECT created_at FROM attendance_days WHERE id = ?");
+    mysqli_stmt_bind_param($stmtDay, "i", $day_id);
+    mysqli_stmt_execute($stmtDay);
+    mysqli_stmt_bind_result($stmtDay, $day_created_at_val);
+    if (mysqli_stmt_fetch($stmtDay)) $dayCreatedAt = $day_created_at_val;
+    mysqli_stmt_close($stmtDay);
+}
+
+
 // ---------- where clauses ----------
 $params = [];
 $where_clauses = [];
 $types = "";
 
+// ensure users are active on the requested date (join_date <= date AND (leave_date IS NULL OR leave_date >= date))
+$where_clauses[] = "(u.join_date IS NULL OR u.join_date <= ?)";
+$params[] = $date;
+$types .= "s";
+$where_clauses[] = "(u.leave_date IS NULL OR u.leave_date >= ?)";
+$params[] = $date;
+$types .= "s";
+
 // search
-$search_sql = "";
 if ($search !== '') {
     $where_clauses[] = "(u.employee_code LIKE CONCAT('%',?,'%') OR u.first_name LIKE CONCAT('%',?,'%') OR u.last_name LIKE CONCAT('%',?,'%'))";
     $params[] = $search;
@@ -99,11 +120,13 @@ if ($day_id) {
     LEFT JOIN users m ON m.id = d.manager_user_id
     LEFT JOIN attendance_records ar ON ar.user_id=u.id AND ar.day_id=?
     LEFT JOIN users a ON ar.ot_approver_id=a.id
-    WHERE 1=1 {$where_sql} {$search_sql}";
+    WHERE 1=1 {$where_sql}";
 
     $allowed_sorts = ['employee_code','first_name','last_name','department_name','present','ot_start','ot_end','date_modified','clock_in','clock_out'];
     if (!in_array($sort, $allowed_sorts)) $sort = 'first_name';
-    $sql .= " ORDER BY {$sort} {$order} LIMIT ? OFFSET ?";
+    // map alias department_name to real column for ORDER BY if needed
+    if ($sort === 'department_name') $order_by = 'd.name'; else $order_by = $sort;
+    $sql .= " ORDER BY {$order_by} {$order} LIMIT ? OFFSET ?";
 
     $stmt = mysqli_prepare($connection, $sql);
 
@@ -116,16 +139,17 @@ if ($day_id) {
 
 } else {
     // no day record -> use defaults
-    $cols .= ", 1 as present, '08:00:00' as clock_in, '17:00:00' as clock_out, NULL as ot_start, NULL as ot_end, NULL as ot_minutes, NULL as ot_task, NULL as product_count, 0 as ot_result, NULL as ot_approver_id, NULL as notes, NULL as date_modified, NULL as ot_approver";
+    $cols .= ", 1 as present, '08:00:00' as clock_in, '17:00:00' as clock_out, NULL as ot_start, NULL as ot_end, NULL as ot_minutes, NULL as ot_task, NULL as product_count, NULL as ot_result, NULL as ot_approver_id, NULL as notes, NULL as date_modified, NULL as ot_approver";
     $sql = "SELECT {$cols}
     FROM users u
     LEFT JOIN departments d ON d.id = u.department_id
     LEFT JOIN users m ON m.id = d.manager_user_id
-    WHERE 1=1 {$where_sql} {$search_sql}";
+    WHERE 1=1 {$where_sql}";
 
     $allowed_sorts = ['employee_code','first_name','last_name','department_name'];
     if (!in_array($sort, $allowed_sorts)) $sort = 'first_name';
-    $sql .= " ORDER BY {$sort} {$order} LIMIT ? OFFSET ?";
+    if ($sort === 'department_name') $order_by = 'd.name'; else $order_by = $sort;
+    $sql .= " ORDER BY {$order_by} {$order} LIMIT ? OFFSET ?";
 
     $stmt = mysqli_prepare($connection, $sql);
 
@@ -150,6 +174,9 @@ while ($r = mysqli_fetch_assoc($res)) {
     // ensure ot_minutes/product_count numeric or null
     if (isset($r['ot_minutes']) && $r['ot_minutes'] !== null) $r['ot_minutes'] = intval($r['ot_minutes']);
     if (isset($r['product_count']) && $r['product_count'] !== null) $r['product_count'] = intval($r['product_count']);
+    if (empty($r['date_modified']) && !empty($dayCreatedAt)) {
+        $r['date_modified'] = $dayCreatedAt;
+    }
     $rows[] = $r;
 }
 
