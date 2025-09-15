@@ -1,11 +1,12 @@
-// Attendance.js
-
-// เปลี่ยนโครงสร้างเป็น module ที่ export init และ destroy
-import user from "../MockUser.js";
 import MultiEditorFactory from "./MultiEditor.js";
+import {
+  permissionsReady,
+  currentUser,
+  userPermissions as mainUserPermissions,
+  departmentsList as mainDepartmentsList,
+} from '../../main.js';
 
 // -------------------- CENTRAL STATE --------------------
-// ย้าย appState มาไว้ด้านนอกเพื่อให้ init/destroy เข้าถึงได้
 const appState = {
   editMode: false,
   datesWithData: new Set(),
@@ -17,12 +18,10 @@ const appState = {
   departmentsList: [],
   selectedRows: new Set(),
   multiEditor: null,
-  multiEditorActive: false,
-  navCaptureHandler: null
+  multiEditorActive: false
 };
 
-// -------------------- HELPER FUNCTIONS (ย้ายมาไว้ข้างนอก) --------------------
-// ... (ฟังก์ชันขนาดเล็กเช่น getTodayIso, formatTimeCell, ฯลฯ) ...
+// -------------------- HELPER FUNCTIONS --------------------
 function getTodayIso() { return new Date().toISOString().slice(0,10); }
 function formatTimeCell(value) {
   if (!value && value !== 0) return '';
@@ -64,28 +63,7 @@ function parseAllowedIds(raw) {
   }
   return String(raw).split(',').map(x=>x.trim()).filter(Boolean);
 }
-function canEdit(permissions = {}, departments = [], selectedDeptId = '') {
-  if (!permissions) return false;
-  if (permissions.can_edit !== null && permissions.can_edit !== undefined) {
-    return Number(permissions.can_edit) === 1;
-  }
-  if (!selectedDeptId) {
-    selectedDeptId = String(permissions.department_id ?? user.department_id ?? '');
-  }
-  const deptRow = (departments || []).find(d => String(d.id) === String(selectedDeptId)) || null;
-  return !!(deptRow && Number(deptRow.can_edit || 0) === 1);
-}
-function canViewHistory(permissions = {}, departments = [], selectedDeptId = '') {
-  if (!permissions) return false;
-  if (permissions.can_view_history !== null && permissions.can_view_history !== undefined) {
-    return Number(permissions.can_view_history) === 1;
-  }
-  if (!selectedDeptId) {
-    selectedDeptId = String(permissions.department_id ?? user.department_id ?? '');
-  }
-  const deptRow = (departments || []).find(d => String(d.id) === String(selectedDeptId)) || null;
-  return !!(deptRow && Number(deptRow.can_view_history || 0) === 1);
-}
+
 function updateAppState(updates = {}, opts = {}) {
   try {
     Object.keys(updates).forEach(k => { appState[k] = updates[k]; });
@@ -94,12 +72,16 @@ function updateAppState(updates = {}, opts = {}) {
     try { updateUIButtons(); } catch (e) { console.warn('updateUIButtons failed', e); }
   }
   if (opts.refreshTable) {
-    try { if ($table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true }); } catch (e) { console.warn('refresh table failed', e); }
+    try {
+      const $table = $('#attendanceTable');
+      if ($table && $table.data && $table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true });
+    } catch (e) { console.warn('refresh table failed', e); }
   }
   if (opts.redrawDatepicker) {
     try { if (appState.fp && typeof appState.fp.redraw === 'function') appState.fp.redraw(); } catch (e) { console.warn('fp.redraw failed', e); }
   }
 }
+
 function updateUIButtons() {
   const $table = $('#attendanceTable');
   const $datePicker = $('#datePicker');
@@ -110,6 +92,7 @@ function updateUIButtons() {
   const $btnSave = $('#btnSave');
   const $btnCancel = $('#btnCancel');
 
+  // Defensive: if elements missing, jQuery returns empty set; methods are safe
   if (appState.editMode) {
     $btnEdit.addClass('d-none').hide();
     $btnSave.removeClass('d-none').show();
@@ -124,32 +107,19 @@ function updateUIButtons() {
     } catch (e) {}
     return;
   }
+
   $btnSave.addClass('d-none').hide();
   $btnCancel.addClass('d-none').hide();
   $btnTogglePresent.addClass('d-none').hide();
   $btnMultiEditor.addClass('d-none').hide();
   if ($table.data('bootstrap.table')) try { $table.bootstrapTable('hideColumn', 'state'); } catch (e) {}
-  if (!appState.userPermissions) {
-    $btnEdit.addClass('d-none').hide();
-    $('#navHistoryLink, a[data-page="page/History/History.php"]').addClass('d-none').hide();
-    return;
-  }
-  const rawSelected = $departmentFilter.val();
-  const selectedDeptId = (rawSelected && String(rawSelected).length) ? String(rawSelected) : String(appState.userPermissions.department_id ?? user.department_id ?? '');
-  if (canEdit(appState.userPermissions, appState.departmentsList, selectedDeptId)) {
-    $btnEdit.removeClass('d-none').show();
-  } else {
-    $btnEdit.addClass('d-none').hide();
-  }
-  if (canViewHistory(appState.userPermissions, appState.departmentsList, selectedDeptId)) {
-    $('#navHistoryLink').removeClass('d-none').show();
-    $('a[data-page="page/History/History.php"]').removeClass('d-none').show();
-  } else {
-    $('#navHistoryLink').addClass('d-none').hide();
-    $('a[data-page="page/History/History.php"]').addClass('d-none').hide();
-  }
+
+  // main.js auto-handles permission toggling (on load and when departmentFilter changes).
+  // Keep appState.userPermissions in sync with main exports so other logic can use it.
+  // We still refresh table here.
   try { if ($table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true }); } catch(e) {}
 }
+
 function initFlatpickrForInputs($root) {
   const $table = $('#attendanceTable');
   $root = $root || $table;
@@ -343,7 +313,6 @@ function processResponseRows(resRows = []) {
 }
 
 // -------------------- FORMATTERS (ต้องเป็น global) --------------------
-// ... (ฟังก์ชัน formatter ทั้งหมด) ...
 window.presentFormatter = function(value, row) {
   const uid = String(row.user_id);
   const draft = (appState.editedData[uid] && appState.editedData[uid].present !== undefined) ? appState.editedData[uid].present : value;
@@ -451,11 +420,8 @@ window.dateModifiedFormatter = function(value) { return formatDateTime(value); }
 
 // -------------------- MAIN LOGIC: init() & destroy() --------------------
 
-/**
- * Initialization function, called by main.js when this page is loaded.
- */
 function init() {
-  const API_BASE = 'connection';
+  const API_BASE = '../../connection';
   const $table = $('#attendanceTable');
   const $datePicker = $('#datePicker');
   const $departmentFilter = $('#departmentFilter');
@@ -465,25 +431,11 @@ function init() {
   const $btnSave = $('#btnSave');
   const $btnCancel = $('#btnCancel');
 
-  // Set up initial UI state
-  $btnEdit.hide(); $btnSave.hide(); $btnCancel.hide();
-  $('#navHistoryLink, a[data-page="page/History/History.php"]').hide();
-
-  // Guard against navigation when editing
-  appState.navCaptureHandler = function(ev) {
-    if (!appState.editMode) return;
-    const el = ev.target && ev.target.closest ? ev.target.closest('.header-center .nav-link') : null;
-    if (!el) return;
-    ev.stopPropagation(); ev.preventDefault();
-    if (confirm('ยังไม่ได้บันทึกการเปลี่ยนแปลง ต้องการออกโดยไม่บันทึกหรือไม่?')) {
-      // Clear the state and re-trigger navigation
-      appState.editMode = false;
-      appState.editedData = {};
-      document.removeEventListener('click', appState.navCaptureHandler, true);
-      setTimeout(() => el.click(), 10);
-    }
-  };
-  document.addEventListener('click', appState.navCaptureHandler, true);
+  // Set up initial UI state (defensive)
+  try { $btnEdit.hide(); } catch(e){}
+  try { $btnSave.hide(); } catch(e){}
+  try { $btnCancel.hide(); } catch(e){}
+  try { $('#navHistoryLink, a[data-page="page/History/History.php"]').hide(); } catch(e){}
 
   // Delegated input handlers
   $(document).on('click.attendance', '.btn-clear-ot', function () {
@@ -537,224 +489,198 @@ function init() {
     updateAllRowEnabledStates();
   });
 
-  // Load data and initialize everything
-  $.getJSON(`${API_BASE}/get_departments.php`)
-    .done(function (data) {
-      const deps = normalizeDepartments(data);
-      appState.departmentsList = deps;
-      const matched = deps.find(d => String(d.id) === String(user.department_id)) || null;
-      function pick(row, key, def) { return (row && Object.prototype.hasOwnProperty.call(row, key)) ? row[key] : def; }
-      const db_department_view = pick(matched, 'department_view', null);
-      const db_can_edit = Number(pick(matched, 'can_edit', 0)) || 0;
-      const db_can_view_history = Number(pick(matched, 'can_view_history', 0)) || 0;
-      const mock_department_view = (user.department_view !== null && user.department_view !== undefined) ? user.department_view : null;
-      const mock_can_edit = (user.can_edit !== null && user.can_edit !== undefined) ? Number(user.can_edit) : null;
-      const mock_can_view_history = (user.can_view_history !== null && user.can_view_history !== undefined) ? Number(user.can_view_history) : null;
-      const resolved_department_view = mock_department_view !== null ? mock_department_view : db_department_view;
-      const resolved_can_edit = mock_can_edit !== null ? mock_can_edit : db_can_edit;
-      const resolved_can_view_history = mock_can_view_history !== null ? mock_can_view_history : db_can_view_history;
-      appState.userPermissions = {
-        department_id: matched?.id ?? user.department_id ?? null,
-        department_name: matched?.name ?? null,
-        department_view: (resolved_department_view === undefined ? null : resolved_department_view),
-        can_edit: (resolved_can_edit === undefined || resolved_can_edit === null) ? 0 : Number(resolved_can_edit),
-        can_view_history: (resolved_can_view_history === undefined || resolved_can_view_history === null) ? 0 : Number(resolved_can_view_history),
-        _matched_row: matched || null
-      };
-    })
-    .fail(function () {
-      appState.userPermissions = {};
-      appState.departmentsList = [];
-    })
-    .always(function () {
-      $.getJSON(`${API_BASE}/get_dates.php`)
-        .done(function(list){ appState.datesWithData = new Set((list||[]).map(String)); })
-        .fail(function(){ appState.datesWithData = new Set(); })
-        .always(function(){
-          $.getJSON(`${API_BASE}/get_departments.php`)
-            .done(function(data){
-              appState.departmentsList = normalizeDepartments(data);
-              const allowedRaw = appState.userPermissions?.department_view;
-              const parsed = parseAllowedIds(allowedRaw);
-              let visibleDeps = [];
-              if (parsed === null) {
-                visibleDeps = appState.departmentsList.filter(d => String(d.id) === String(user.department_id));
-              } else if (parsed.length === 1 && parsed[0] === '0') {
-                visibleDeps = appState.departmentsList.slice();
-              } else if (parsed.length === 0) {
-                visibleDeps = appState.departmentsList.filter(d => String(d.id) === String(user.department_id));
-              } else {
-                const ids = new Set(parsed.map(String));
-                visibleDeps = appState.departmentsList.filter(d => ids.has(String(d.id)));
+  // Use main.js permissions (it auto-initializes). Wait for it and then continue setup.
+  permissionsReady.then(() => {
+    // sync permissions into local state
+    appState.userPermissions = mainUserPermissions;
+    appState.departmentsList = Array.isArray(mainDepartmentsList) ? mainDepartmentsList : normalizeDepartments(mainDepartmentsList);
+
+    // populate departmentFilter using permission'd departments
+    try {
+      const allowedRaw = appState.userPermissions?.department_view;
+      const parsed = parseAllowedIds(allowedRaw);
+      let visibleDeps = [];
+      if (parsed === null) {
+        visibleDeps = appState.departmentsList.filter(d => String(d.id) === String(currentUser?.department_id));
+      } else if (parsed.length === 1 && parsed[0] === '0') {
+        visibleDeps = appState.departmentsList.slice();
+      } else if (parsed.length === 0) {
+        visibleDeps = appState.departmentsList.filter(d => String(d.id) === String(currentUser?.department_id));
+      } else {
+        const ids = new Set(parsed.map(String));
+        visibleDeps = appState.departmentsList.filter(d => ids.has(String(d.id)));
+      }
+      $departmentFilter.empty();
+      if (visibleDeps.length > 1) $departmentFilter.append(`<option value="">ทุกแผนก</option>`);
+      visibleDeps.forEach(dep => $departmentFilter.append(`<option value="${dep.id}">${dep.name}</option>`));
+      if (visibleDeps.length > 1) $departmentFilter.val('');
+      else if (visibleDeps.length === 1) $departmentFilter.val(String(visibleDeps[0].id));
+      else $departmentFilter.val(String(currentUser?.department_id || ''));
+    } catch (e) {
+      // fallback: leave whatever is in DOM
+      console.warn('populate departmentFilter failed', e);
+    }
+
+    // now load dates and continue to initialize table + UI
+    $.getJSON(`${API_BASE}/get_dates.php`)
+      .done(function(list){ appState.datesWithData = new Set((list||[]).map(String)); })
+      .fail(function(){ appState.datesWithData = new Set(); })
+      .always(function(){
+        if ($datePicker && !$datePicker.val()) $datePicker.val(getTodayIso());
+        try { if (appState.fp && appState.fp.destroy) appState.fp.destroy(); } catch(e){}
+        appState.lastPickedDate = $datePicker && $datePicker.val() ? $datePicker.val() : getTodayIso();
+
+        try {
+          appState.fp = flatpickr('#datePicker', {
+            dateFormat: 'Y-m-d',
+            locale: 'th',
+            defaultDate: appState.lastPickedDate,
+            maxDate: new Date(),
+            onChange: function (selectedDates, dateStr, instance) {
+              if (appState.editMode) {
+                if (!confirm('ยังไม่ได้บันทึกการเปลี่ยนแปลง ต้องการเปลี่ยนวันที่โดยไม่บันทึกหรือไม่?')) {
+                  try { instance.setDate(appState.lastPickedDate, false); } catch (e) { if ($datePicker) $datePicker.val(appState.lastPickedDate); }
+                  return;
+                }
               }
-              $departmentFilter.empty();
-              if (visibleDeps.length > 1) $departmentFilter.append(`<option value="">ทุกแผนก</option>`);
-              visibleDeps.forEach(dep => $departmentFilter.append(`<option value="${dep.id}">${dep.name}</option>`));
-              if (visibleDeps.length > 1) $departmentFilter.val('');
-              else if (visibleDeps.length === 1) $departmentFilter.val(String(visibleDeps[0].id));
-              else $departmentFilter.val(String(user.department_id || ''));
-            })
-            .fail(function(){
-              $departmentFilter.html('<option value="">ทุกแผนก</option>');
-              appState.departmentsList = [];
-            })
-            .always(function(){
-              if (!$datePicker.val()) $datePicker.val(getTodayIso());
-              try { if (appState.fp && appState.fp.destroy) appState.fp.destroy(); } catch(e){}
-              appState.lastPickedDate = $datePicker.val() || getTodayIso();
+              updateAppState({ lastPickedDate: dateStr || appState.lastPickedDate, editMode: false, editedData: {}, multiEditorActive: false }, { refreshTable: true });
+              if (appState.multiEditor) try { appState.multiEditor.hide(); } catch (e) {}
+            },
+            onDayCreate: function (_, __, ___, dayElement) {
+              try { if (appState.datesWithData.has(formatDateKey(dayElement.dateObj))) dayElement.classList.add('has-data'); } catch (e) {}
+            }
+          });
+        } catch (e) { /* ignore fp errors */ }
+        if (appState.fp && appState.fp.redraw) appState.fp.redraw();
 
-              try {
-                appState.fp = flatpickr('#datePicker', {
-                  dateFormat: 'Y-m-d',
-                  locale: 'th',
-                  defaultDate: appState.lastPickedDate,
-                  maxDate: new Date(),
-                  onChange: function (selectedDates, dateStr, instance) {
-                    if (appState.editMode) {
-                      if (!confirm('ยังไม่ได้บันทึกการเปลี่ยนแปลง ต้องการเปลี่ยนวันที่โดยไม่บันทึกหรือไม่?')) {
-                        try { instance.setDate(appState.lastPickedDate, false); } catch (e) { $datePicker.val(appState.lastPickedDate); }
-                        return;
-                      }
-                    }
-                    updateAppState({ lastPickedDate: dateStr || appState.lastPickedDate, editMode: false, editedData: {}, multiEditorActive: false }, { refreshTable: true });
-                    if (appState.multiEditor) try { appState.multiEditor.hide(); } catch (e) {}
-                  },
-                  onDayCreate: function (_, __, ___, dayElement) {
-                    try { if (appState.datesWithData.has(formatDateKey(dayElement.dateObj))) dayElement.classList.add('has-data'); } catch (e) {}
-                  }
-                });
-              } catch (e) { /* ignore fp errors */ }
-              if (appState.fp && appState.fp.redraw) appState.fp.redraw();
+        // Initialize/refresh table
+        try { $table.off('.attendance'); } catch(e){}
+        $table.bootstrapTable('destroy');
+        $table.bootstrapTable({
+          url: `${API_BASE}/get_attendance.php`,
+          sidePagination: 'server',
+          pagination: true,
+          pageSize: 10,
+          pageList: [5, 10, 25, 1, 50, 1, 100, 'All'],
+          search: true,
+          clickToSelect: true,
+          showColumns: true,
+          showExport: true,
+          exportTypes: ['excel','csv','txt'],
+          toolbar: '#customToolbar',
+          maintainSelected: true,
+          queryParams: function (p) {
+            return { ...p, date: $datePicker.val(), department_id: $departmentFilter.val(), allowed_departments: appState.userPermissions?.department_view || "0" };
+          },
+          responseHandler: function (res) {
+            const rows = (res && res.rows) ? res.rows : [];
+            const processed = processResponseRows(rows);
+            appState.originalData = processed.originalData;
+            return { ...res, rows: processed.rows };
+          },
+          rowStyle: function () { return { classes: 'employee-row' }; },
+          onPostBody: function () {
+            if (appState.editMode) {
+              initFlatpickrForInputs();
+              ensureClearOtButtonsInitialized();
+              applyDraftsToDOM();
+              applySelectedRowsToDOM();
+              updateAllRowEnabledStates();
+            } else {
+              $table.find('input,textarea').off('input change');
+            }
+            setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
+            fixHeaderCheckboxBehavior();
+          }
+        });
 
-              // Initialize/refresh table
-              try { $table.off('.attendance'); } catch(e){}
-              $table.bootstrapTable('destroy');
-              $table.bootstrapTable({
-                url: `${API_BASE}/get_attendance.php`,
-                sidePagination: 'server',
-                pagination: true,
-                pageSize: 10,
-                pageList: [5, 10, 25, 1, 50, 1, 100, 'All'],
-                search: true,
-                clickToSelect: true,
-                showColumns: true,
-                showExport: true,
-                exportTypes: ['excel','csv','txt'],
-                toolbar: '#customToolbar',
-                maintainSelected: true,
-                queryParams: function (p) {
-                  return { ...p, date: $datePicker.val(), department_id: $departmentFilter.val(), allowed_departments: appState.userPermissions?.department_view || "0" };
-                },
-                responseHandler: function (res) {
-                  const rows = (res && res.rows) ? res.rows : [];
-                  const processed = processResponseRows(rows);
-                  appState.originalData = processed.originalData;
-                  return { ...res, rows: processed.rows };
-                },
-                rowStyle: function () { return { classes: 'employee-row' }; },
-                onPostBody: function () {
-                  if (appState.editMode) {
-                    initFlatpickrForInputs();
-                    ensureClearOtButtonsInitialized();
-                    applyDraftsToDOM();
-                    applySelectedRowsToDOM();
-                    updateAllRowEnabledStates();
-                  } else {
-                    $table.find('input,textarea').off('input change');
-                  }
-                  setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
-                  fixHeaderCheckboxBehavior();
-                }
+        $table.on('check.bs.table.attendance uncheck.bs.table.attendance check-all.bs.table.attendance uncheck-all.bs.table.attendance', function () {
+          try { updateAllRowEnabledStates(); applySelectedRowsToDOM(); } catch (err) { console.warn(err); }
+        });
+        $table.on('load-success.bs.table.attendance', function () {
+          try {
+            if (appState.editMode && appState.multiEditorActive) $table.bootstrapTable('showColumn', 'state');
+            else $table.bootstrapTable('hideColumn', 'state');
+          } catch (e) {}
+        });
+        $table.on('post-body.bs.table.attendance', function () {
+          if (appState.editMode) {
+            initFlatpickrForInputs();
+            ensureClearOtButtonsInitialized();
+            applyDraftsToDOM();
+            applySelectedRowsToDOM();
+            updateAllRowEnabledStates();
+          } else {
+            $table.find('input,textarea').off('input change');
+          }
+          fixHeaderCheckboxBehavior();
+        });
+
+        updateUIButtons();
+
+        // MultiEditor init & sync
+        try {
+          if (!appState.multiEditor) {
+            appState.multiEditor = MultiEditorFactory();
+            appState.multiEditor.init({ containerSelector: '#pageContent', tableSelector: '#attendanceTable', applyCallback: function(records){
+              records.forEach(r => {
+                const uid = String(r.user_id);
+                if (!appState.editedData[uid]) appState.editedData[uid] = {};
+                ['present','clock_in','clock_out','ot_start','ot_end','ot_minutes','ot_task','product_count','ot_result','notes']
+                  .forEach(k => { if (r.hasOwnProperty(k)) appState.editedData[uid][k] = r[k]; });
+                appState.selectedRows.add(Number(uid));
               });
+              updateTableUi();
+              try { if (appState.multiEditor && typeof appState.multiEditor.setSelectedKeys === 'function') appState.multiEditor.setSelectedKeys(Array.from(appState.selectedRows).map(String)); } catch(e){console.warn(e);}
+            }});
+          }
 
-              $table.on('check.bs.table.attendance uncheck.bs.table.attendance check-all.bs.table.attendance uncheck-all.bs.table.attendance', function () {
-                try { updateAllRowEnabledStates(); applySelectedRowsToDOM(); } catch (err) { console.warn(err); }
-              });
-              $table.on('load-success.bs.table.attendance', function () {
-                try {
-                  if (appState.editMode && appState.multiEditorActive) $table.bootstrapTable('showColumn', 'state');
-                  else $table.bootstrapTable('hideColumn', 'state');
-                } catch (e) {}
-              });
-              $table.on('post-body.bs.table.attendance', function () {
-                if (appState.editMode) {
-                  initFlatpickrForInputs();
-                  ensureClearOtButtonsInitialized();
-                  applyDraftsToDOM();
-                  applySelectedRowsToDOM();
-                  updateAllRowEnabledStates();
-                } else {
-                  $table.find('input,textarea').off('input change');
-                }
-                fixHeaderCheckboxBehavior();
-              });
+          if (appState.multiEditor && typeof appState.multiEditor.onSelectionChange === 'function') {
+            let _selChangeTimer = null;
+            appState.multiEditor.onSelectionChange(function (keys) {
+              if (_selChangeTimer) clearTimeout(_selChangeTimer);
+              _selChangeTimer = setTimeout(function () {
+                _selChangeTimer = null;
+                try { applySelectedRowsToDOM(); } catch(e){ console.warn('applySelectedRowsToDOM failed', e); }
+              }, 40);
+            });
+          }
 
-              updateUIButtons();
+          $(document).on('multiEditor:shown', function () {
+            if (typeof appState.multiEditor.setSelectedKeys === 'function') {
+              setTimeout(function () {
+                try { appState.multiEditor.setSelectedKeys(Array.from(appState.selectedRows).map(x => String(x))); } catch (e) {}
+              }, 50);
+            }
+            try { if ($table.data('bootstrap.table')) $table.bootstrapTable('showColumn', 'state'); } catch(e){}
+          });
 
-              // MultiEditor init & sync
-              try {
-                if (!appState.multiEditor) {
-                  appState.multiEditor = MultiEditorFactory();
-                  appState.multiEditor.init({ containerSelector: '#pageContent', tableSelector: '#attendanceTable', applyCallback: function(records){
-                    records.forEach(r => {
-                      const uid = String(r.user_id);
-                      if (!appState.editedData[uid]) appState.editedData[uid] = {};
-                      ['present','clock_in','clock_out','ot_start','ot_end','ot_minutes','ot_task','product_count','ot_result','notes']
-                        .forEach(k => { if (r.hasOwnProperty(k)) appState.editedData[uid][k] = r[k]; });
-                      appState.selectedRows.add(Number(uid));
-                    });
-                    updateTableUi();
-                    try { if (appState.multiEditor && typeof appState.multiEditor.setSelectedKeys === 'function') appState.multiEditor.setSelectedKeys(Array.from(appState.selectedRows).map(String)); } catch(e){console.warn(e);}
-                  }});
-                }
+        } catch (e) { console.warn('MultiEditor init failed', e); }
 
-                if (appState.multiEditor && typeof appState.multiEditor.onSelectionChange === 'function') {
-                  let _selChangeTimer = null;
-                  appState.multiEditor.onSelectionChange(function (keys) {
-                    if (_selChangeTimer) clearTimeout(_selChangeTimer);
-                    _selChangeTimer = setTimeout(function () {
-                      _selChangeTimer = null;
-                      try { applySelectedRowsToDOM(); } catch(e){ console.warn('applySelectedRowsToDOM failed', e); }
-                    }, 40);
-                  });
-                }
+        $(document).on('multiEditor:hidden', function () {
+          updateAppState({ multiEditorActive: false }, { skipUIUpdate: false });
+          $btnMultiEditor.removeClass('active');
+          try { if ($table.data('bootstrap.table')) $table.bootstrapTable('hideColumn', 'state'); } catch(e){}
+          setSelectionEnabled(false);
+        });
+        $(document).on('multiEditor:shown', function () {
+          updateAppState({ multiEditorActive: true }, { skipUIUpdate: false });
+          setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
+        });
 
-                $(document).on('multiEditor:shown', function () {
-                  if (typeof appState.multiEditor.setSelectedKeys === 'function') {
-                    setTimeout(function () {
-                      try { appState.multiEditor.setSelectedKeys(Array.from(appState.selectedRows).map(x => String(x))); } catch (e) {}
-                    }, 50);
-                  }
-                  try { if ($table.data('bootstrap.table')) $table.bootstrapTable('showColumn', 'state'); } catch(e){}
-                });
+        $(document).on('click.attendance', '.export .dropdown-menu a', function () {
+          setTimeout(function () {
+            try { $table.bootstrapTable('hideColumn', 'ot_result'); $table.bootstrapTable('hideColumn', 'ot_result_text'); } catch (e) {}
+          }, 250);
+        });
 
-              } catch (e) { console.warn('MultiEditor init failed', e); }
+      }); // end dates always
+  }); // end permissionsReady
 
-              $(document).on('multiEditor:hidden', function () {
-                updateAppState({ multiEditorActive: false }, { skipUIUpdate: false });
-                $btnMultiEditor.removeClass('active');
-                try { if ($table.data('bootstrap.table')) $table.bootstrapTable('hideColumn', 'state'); } catch(e){}
-                setSelectionEnabled(false);
-              });
-              $(document).on('multiEditor:shown', function () {
-                updateAppState({ multiEditorActive: true }, { skipUIUpdate: false });
-                setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
-              });
-
-              $(document).on('click.attendance', '.export .dropdown-menu a', function () {
-                setTimeout(function () {
-                  try { $table.bootstrapTable('hideColumn', 'ot_result'); $table.bootstrapTable('hideColumn', 'ot_result_text'); } catch (e) {}
-                }, 250);
-              });
-
-            }); // end departments
-        }); // end dates always
-    }); // end permissions always
-  
-  // Button handlers
-  $btnEdit.on('click.attendance', function () { enterEditMode(); });
-  $btnCancel.on('click.attendance', function () { exitEditMode({ clearDrafts: true, hideMultiEditor: true, refreshTable: true }); });
-  $btnSave.on('click.attendance', function () {
+  // Button handlers (defensive - jQuery empty handlers are safe)
+  try { $btnEdit.on('click.attendance', function () { enterEditMode(); }); } catch(e){}
+  try { $btnCancel.on('click.attendance', function () { exitEditMode({ clearDrafts: true, hideMultiEditor: true, refreshTable: true }); }); } catch(e){}
+  try { $btnSave.on('click.attendance', function () {
     const incomplete = validateOtFields(appState.editedData, appState.originalData);
     if (incomplete.length) {
       const rowsData = $table.bootstrapTable ? ($table.bootstrapTable('getData') || []) : [];
@@ -793,15 +719,15 @@ function init() {
       },
       error: function () { alert('บันทึกไม่สำเร็จ'); }
     });
-  });
-  $btnTogglePresent.on('click.attendance', function () {
+  }); } catch(e){}
+  try { $btnTogglePresent.on('click.attendance', function () {
     if (!appState.editMode) return;
     const $all = $table.find('.present-checkbox');
     const checkedCount = $all.filter(':checked').length;
     const allChecked = ($all.length && checkedCount === $all.length);
     $all.prop('checked', !allChecked).trigger('change');
-  });
-  $btnMultiEditor.on('click.attendance', function () {
+  }); } catch(e){}
+  try { $btnMultiEditor.on('click.attendance', function () {
     if (!appState.editMode) return;
     const want = !appState.multiEditorActive;
     updateAppState({ multiEditorActive: want }, { refreshTable: true });
@@ -813,49 +739,68 @@ function init() {
       $btnMultiEditor.removeClass('active');
     }
     setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
-  });
-  $('#btnDownload').on('click.attendance', function () {
+  }); } catch(e){}
+  try { $('#btnDownload').on('click.attendance', function () {
     const url = `${API_BASE}/export_attendance.php?date=${encodeURIComponent($datePicker.val())}` + ($departmentFilter.val() ? `&department_id=${$departmentFilter.val()}` : '');
     window.location.href = url;
-  });
-  $departmentFilter.on('change.attendance', function () {
+  }); } catch(e){}
+  try { $departmentFilter.on('change.attendance', function () {
     if ($table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true });
+    // let main.js re-evaluate permission UI
+    try { if (typeof syncUiWithDepartmentFilter === 'function') syncUiWithDepartmentFilter(); } catch (e) {}
     updateUIButtons();
-  });
+  }); } catch(e){}
 
   // Small helpers
-  function enterEditMode() { updateAppState({ editMode: true }, { refreshTable: true }); updateTableUi(); }
-  function exitEditMode(opts = { clearDrafts: true, hideMultiEditor: true, refreshTable: true }) {
-    const updates = { editMode: false, multiEditorActive: false };
-    if (opts.clearDrafts) updates.editedData = {};
-    updateAppState(updates, { refreshTable: !!opts.refreshTable });
-    if (opts.hideMultiEditor && appState.multiEditor) {
-      try { appState.multiEditor.hide(); } catch (e) {}
-      $btnMultiEditor.removeClass('active');
+    const _beforeUnloadHandler = function (e) {
+    if (!appState.editMode) return undefined; // ถ้าไม่แก้ไขอยู่ ไม่เตือน
+    const msg = 'ยังไม่ได้บันทึกการเปลี่ยนแปลง — คุณแน่ใจว่าจะออกจากหน้านี้หรือไม่?';
+    e.preventDefault();
+    e.returnValue = msg; // จำเป็นสำหรับ Chrome/Firefox
+    return msg;
+  };
+  let _unloadAttached = false;
+  function setUnloadWarning(enabled) {
+    try {
+      if (enabled && !_unloadAttached) {
+        window.addEventListener('beforeunload', _beforeUnloadHandler);
+        _unloadAttached = true;
+      } else if (!enabled && _unloadAttached) {
+        window.removeEventListener('beforeunload', _beforeUnloadHandler);
+        _unloadAttached = false;
+      }
+    } catch (err) {
+    console.warn('setUnloadWarning failed', err);
     }
   }
-
-  // Expose appState to global for easier access from main.js
-  window.appState = appState;
-}
-
-/**
- * Cleanup function, called by main.js when leaving this page.
- */
-function destroy() {
-  const $table = $('#attendanceTable');
-  const $datePicker = $('#datePicker');
-  const $departmentFilter = $('#departmentFilter');
-  // Destroy plugins and event listeners
-  try { if (appState.fp) appState.fp.destroy(); } catch(e){}
-  try { if ($table.data('bootstrap.table')) $table.bootstrapTable('destroy'); } catch(e){}
-  try { if (appState.multiEditor) appState.multiEditor.destroy(); } catch(e){}
-  $(document).off('.attendance');
-  window.appState = null;
-  if (appState.navCaptureHandler) {
-    document.removeEventListener('click', appState.navCaptureHandler, true);
+  function enterEditMode() {
+    updateAppState({ editMode: true }, { refreshTable: true });
+    updateTableUi();
+    try { setUnloadWarning(true); } catch(e){ console.warn(e); }
   }
+
+  function exitEditMode(opts = { clearDrafts: true, hideMultiEditor: true, refreshTable: true }) {
+    const updates = { editMode: false, multiEditorActive: false };
+    
+    if (opts.clearDrafts) updates.editedData = {};
+    updateAppState(updates, { refreshTable: !!opts.refreshTable });
+    try { setUnloadWarning(false); } catch(e){ console.warn(e); }
+
+    if (opts.hideMultiEditor && appState.multiEditor) {
+      try { appState.multiEditor.hide(); } catch (e) {}
+      $('#btnMultiEditor').removeClass('active');
+    }
+
+    try {
+      const $btnEdit = $('#btnEdit');
+      $btnEdit.removeClass('d-none').show();
+    } catch (e) { console.warn('show btnEdit failed', e); }
+  }
+
+
+
+  // Expose appState to global for debug/compatibility
+  try { window.appState = appState; } catch (e) {}
 }
 
-// Export the functions to be called by main.js
-export { init, destroy };
+init();

@@ -1,1 +1,5 @@
 /* /page/History/History.css */
+
+.header-right {
+    display: none !important;
+}

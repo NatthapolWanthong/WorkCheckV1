@@ -1,16 +1,14 @@
-/* /page/main.css ห้ามลบบรรทัดนี้ */
 
-/* ปรับขนาด container ให้เต็มจอ */
 #pageContent {
-  min-height: calc(100vh - 70px); /* ลบความสูง header ออก */
+  min-height: calc(100vh - 70px); 
   background: #fff;
-  border-radius: 0;               /* ไม่ต้องมีขอบโค้ง */
+  border-radius: 0;     
   padding: 0 20px;
-  box-shadow: none;               /* ไม่ต้องมีเงาถ้าต้องการเต็มจริงๆ */
+  box-shadow: none; 
   margin: 0;
   width: 100%;
 }
-/* Loading state */
+
 #pageContent .text-muted {
   font-size: 1.1rem;
   color: #888;
