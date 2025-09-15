@@ -29,7 +29,7 @@
 <body class="bg-light">
 
     <!-- Header -->
-    <?php include('../../components/header.html'); ?>
+    <?php include('../../components/header.php'); ?>
 
     <!-- Content -->
    <div id="pageContent">

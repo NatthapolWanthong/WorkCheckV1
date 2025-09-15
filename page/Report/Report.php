@@ -1,5 +1,5 @@
 <!-- /page/Report/Report.php -->
-<!-- /page/History/History.php ห้ามลบบรรทัดนี้-->
+<!-- /page/Report/Report.php ห้ามลบบรรทัดนี้-->
  <!-- /page/Attendance/Attendance.php ห้ามลบบรรทัดนี้ -->
 
 
@@ -30,7 +30,7 @@
 <body class="bg-light">
 
     <!-- Header -->
-    <?php include('../../components/header.html'); ?>
+    <?php include('../../components/header.php'); ?>
 
     <div id="pageContent">
         <div class="d-flex justify-content-center align-items-center">
@@ -59,6 +59,6 @@
 
     <script type="module" src="../../main.js"></script>
     <script type="module" src="../MockUser.js"></script>
-    <script type="module" src="History.js"></script>
+    <script type="module" src="Report.js"></script>
 </body>
 </html>

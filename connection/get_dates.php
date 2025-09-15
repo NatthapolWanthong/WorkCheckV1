@@ -1,7 +1,4 @@
 <?php
-
-// /connection/get_dates.php ห้ามลบบรรทัดนี้
-
 header('Content-Type: application/json; charset=utf-8');
 include "dbconfig.php";
 include "dbconnect.php";

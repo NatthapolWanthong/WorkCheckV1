@@ -1,10 +1,14 @@
 import MultiEditorFactory from "./MultiEditor.js";
 import {
   permissionsReady,
-  currentUser,
+  whenPermissionsReady,
+  getCurrentUser,
   userPermissions as mainUserPermissions,
   departmentsList as mainDepartmentsList,
 } from '../../main.js';
+
+await whenPermissionsReady();
+const currentUser = getCurrentUser();
 
 // -------------------- CENTRAL STATE --------------------
 const appState = {
@@ -113,10 +117,6 @@ function updateUIButtons() {
   $btnTogglePresent.addClass('d-none').hide();
   $btnMultiEditor.addClass('d-none').hide();
   if ($table.data('bootstrap.table')) try { $table.bootstrapTable('hideColumn', 'state'); } catch (e) {}
-
-  // main.js auto-handles permission toggling (on load and when departmentFilter changes).
-  // Keep appState.userPermissions in sync with main exports so other logic can use it.
-  // We still refresh table here.
   try { if ($table.data('bootstrap.table')) $table.bootstrapTable('refresh', { silent: true }); } catch(e) {}
 }
 
@@ -667,15 +667,8 @@ function init() {
           updateAppState({ multiEditorActive: true }, { skipUIUpdate: false });
           setSelectionEnabled(Boolean(appState.editMode && appState.multiEditorActive));
         });
-
-        $(document).on('click.attendance', '.export .dropdown-menu a', function () {
-          setTimeout(function () {
-            try { $table.bootstrapTable('hideColumn', 'ot_result'); $table.bootstrapTable('hideColumn', 'ot_result_text'); } catch (e) {}
-          }, 250);
-        });
-
-      }); // end dates always
-  }); // end permissionsReady
+      });
+  });
 
   // Button handlers (defensive - jQuery empty handlers are safe)
   try { $btnEdit.on('click.attendance', function () { enterEditMode(); }); } catch(e){}

@@ -1,19 +1,39 @@
-<!-- /components/header.html -->
+<?php
 
-<header class="d-flex flex-wrap justify-content-center justify-content-md-between align-items-center shadow-sm border-bottom position-sticky" style="height: auto; z-index: 99;">
+$cur = strtolower(basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: $_SERVER['PHP_SELF']));
+?>
+<header class="d-flex ...">
   <!-- Left -->
   <div class="header-left d-flex flex-column justify-content-center">
     <h4 class="mb-0 text-primary kanit-semibold">ระบบลงเวลาทำงาน</h4>
   </div>
 
-  <!-- Center -->
+  <!-- center nav (short form) -->
   <ul class="header-center nav position-absolute top-50 start-50 translate-middle">
-  <li><a href="../Attendance/Attendance.php" class="nav-link px-3 fw-semibold link-secondary active">ลงเวลา</a></li>
-  <li><a href="../Report/Report.php" class="nav-link px-3 fw-semibold">สรุป</a></li>
-  <li><a href="../History/History.php" id="navHistoryLink" class="nav-link px-3 fw-semibold d-none">ประวัติ</a></li>
-</ul>
+    <li>
+      <a href="../Attendance/Attendance.php"
+         class="nav-link px-3 fw-semibold <?= $cur === 'attendance.php' ? 'active' : '' ?>"
+         <?= $cur === 'attendance.php' ? 'aria-current="page"' : '' ?>>
+         ลงเวลา
+      </a>
+    </li>
 
+    <li>
+      <a href="../Report/Report.php"
+         class="nav-link px-3 fw-semibold <?= $cur === 'report.php' ? 'active' : '' ?>"
+         <?= $cur === 'report.php' ? 'aria-current="page"' : '' ?>>
+         สรุป
+      </a>
+    </li>
 
+    <li>
+      <a href="../History/History.php" id="navHistoryLink"
+         class="nav-link px-3 fw-semibold <?= $cur === 'history.php' ? 'active' : '' ?>"
+         <?= $cur === 'history.php' ? 'aria-current="page"' : '' ?>>
+         ประวัติ
+      </a>
+    </li>
+  </ul>
 
   <!-- Right -->
   <div class="header-right d-flex gap-2">

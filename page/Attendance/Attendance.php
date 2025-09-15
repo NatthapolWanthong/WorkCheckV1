@@ -29,7 +29,11 @@
 <body class="bg-light">
 
   <!-- Header -->
-  <?php include('../../components/header.html'); ?>
+   
+  <?php 
+  $activePage = 'attendance';
+  include('../../components/header.php'); 
+  ?>
 
   <!-- Content -->
    <div id="pageContent">
@@ -110,7 +114,7 @@
           <th data-field="ot_result_text"
               data-visible="false"
               data-force-export="true"
-              data-switchable="false">OT ผลลัพธ์ (Export)</th>
+              data-switchable="false">OT สรุป (Export)</th>
 
           <th data-field="ot_result"
               data-formatter="otResultFormatter"
@@ -126,6 +130,7 @@
     </table>
   </div>
 
+  <script type="module" src="../../main.js"></script>
   <!-- Shared scripts (วางก่อนปิด body) -->
   <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -144,7 +149,7 @@
 
   <!-- xlsx (export) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script type="module" src="../../main.js"></script>
+  
   <script type="module" src="../MockUser.js"></script>
   <script type="module" src="Attendance.js"></script>
   <script type="module" src="MultiEditor.js"></script>
