@@ -16,8 +16,6 @@
 <!-- Table -->
 <table id="attendanceTable"
   class="table table-bordered table-hover table-sm"
-  data-toggle="table"
-  data-url="connection/get_attendance.php"
   data-pagination="true"
   data-page-size="25"
   data-search="true"

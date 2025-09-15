@@ -2,202 +2,158 @@
 
 'use strict';
 
-// Map page URLs to their scripts
-const pageScriptMap = {
-  'page/Attendance/Attendance.php': { src: 'page/Attendance/Attendance.js', module: true },
-  'page/Report/Report.php':         { src: 'page/Report/Report.js', module: true },
-  'page/History/History.php':       { src: 'page/History/History.js', module: true }
+// Map page URLs to their scripts and provide a name for each page.
+// The name is used to find the corresponding module's destroy/init functions.
+const pageMap = {
+  'page/Attendance/Attendance.php': {
+    script: 'page/Attendance/Attendance.js',
+    moduleName: 'AttendanceModule'
+  },
+  'page/Report/Report.php': {
+    script: 'page/Report/Report.js',
+    moduleName: 'ReportModule'
+  },
+  'page/History/History.php': {
+    script: 'page/History/History.js',
+    moduleName: 'HistoryModule'
+  }
 };
 
-let currentPage = null;
-let currentModule = null;
+let currentPageUrl = null;
+let currentPageModule = null;
 
-// --- Helpers ---
+// --- Helper Functions ---
 
-function resolvePageEntry(url) {
-  if (!url) return null;
-  if (pageScriptMap[url]) return pageScriptMap[url];
-  if (url.startsWith('/')) {
-    const t = url.slice(1);
-    if (pageScriptMap[t]) return pageScriptMap[t];
-  }
-  const filename = url.split('/').pop();
-  for (const k in pageScriptMap) {
-    if (k.endsWith(filename)) return pageScriptMap[k];
-  }
-  const parts = url.split('/').filter(Boolean);
-  if (parts.length >= 2) {
-    const last2 = parts.slice(-2).join('/');
-    for (const k in pageScriptMap) {
-      if (k.endsWith(last2)) return pageScriptMap[k];
+/**
+ * Loads a JavaScript module dynamically and returns its exported object.
+ * @param {string} src The URL of the script.
+ * @returns {Promise<Object|null>}
+ */
+function loadModule(src) {
+  return new Promise((resolve, reject) => {
+    // Check for a script with the same src, ensuring it hasn't been added yet.
+    if (document.querySelector(`script[src="${src}"]`)) {
+        return resolve(null);
     }
-  }
-  return null;
-}
-
-function resolveUrlRelative(src) {
-  try { return new URL(src, window.location.href).href; }
-  catch (e) { return src; }
-}
-
-// --- Cleanup before loading new page ---
-
-function destroyBootstrapTables($container) {
-  $container.find('[data-toggle="table"]').each(function () {
-    try {
-      const $t = $(this);
-      if ($t.data('bootstrap.table')) $t.bootstrapTable('destroy');
-    } catch (e) { console.warn('destroyBootstrapTables:', e); }
-  });
-}
-
-function destroyFlatpickrs($container) {
-  $container.find('input,textarea').each(function () {
-    try { if (this._flatpickr) this._flatpickr.destroy(); } catch (e) { console.warn('destroyFlatpickrs:', e); }
-  });
-}
-
-function cleanupPageContent() {
-  const $c = $('#pageContent');
-  destroyBootstrapTables($c);
-  destroyFlatpickrs($c);
-  try { $c.find('*').off(); } catch (e) { console.warn('cleanup off', e); }
-  document.querySelectorAll('script[data-dyn-script]').forEach(s => s.remove());
-}
-
-// --- Load script for a page entry ---
-
-function loadScriptForEntry(entry) {
-  return new Promise(function (resolve) {
-    if (!entry || !entry.src) return resolve(null);
-
-    const resolved = resolveUrlRelative(entry.src);
-    const cacheBusted = resolved + (resolved.includes('?') ? '&' : '?') + 't=' + Date.now();
-
-    if (entry.module) {
-      import(cacheBusted).then(mod => {
-        try { if (mod && typeof mod.init === 'function') mod.init(); } catch (e) { console.warn('module.init error', e); }
-        resolve(mod || null);
-      }).catch(err => {
-        console.warn('dynamic import failed, fallback to inject:', err);
-        fallbackInjectScript(resolved).then(mod => resolve(mod));
-      });
-      return;
-    }
-
-    const s = document.createElement('script');
-    s.src = cacheBusted;
-    s.setAttribute('data-dyn-script', resolved);
-    s.onload = function () { resolve(null); };
-    s.onerror = function () {
-      console.error('script load failed:', resolved);
-      resolve(null);
+    const script = document.createElement('script');
+    script.src = src;
+    script.type = 'module';
+    script.setAttribute('data-loaded-page', src);
+    script.onload = () => {
+      // Find the module object by checking a globally exposed name if needed.
+      const moduleName = Object.values(pageMap).find(p => p.script === src)?.moduleName;
+      resolve(moduleName ? window[moduleName] : null);
     };
-    document.body.appendChild(s);
+    script.onerror = () => {
+      console.error(`Failed to load script: ${src}`);
+      reject(new Error(`Failed to load script: ${src}`));
+    };
+    document.body.appendChild(script);
   });
 }
 
-// Fallback: inject a wrapper module that imports the real script and attaches it to window
-function fallbackInjectScript(resolvedUrl) {
-  return new Promise(function (resolve) {
-    const baseNameMatch = resolvedUrl.match(/\/([^\/\?#]+)\.js(?:[?#]|$)/);
-    const base = baseNameMatch ? baseNameMatch[1] : 'Page';
-    const globalName = base + 'Module';
+/**
+ * Cleans up the previous page's content, including any attached events or plugins.
+ */
+function cleanupPreviousPage() {
+  const $content = $('#pageContent');
+  
+  // Call the module's destroy function if it exists.
+  if (currentPageModule && typeof currentPageModule.destroy === 'function') {
+    try {
+      currentPageModule.destroy();
+      console.log(`[Nav] Cleaned up module for ${currentPageUrl}`);
+    } catch (e) {
+      console.warn(`[Nav] Module destroy failed for ${currentPageUrl}`, e);
+    }
+  }
 
-    const cacheBusted = resolvedUrl + (resolvedUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-    const wrapper = document.createElement('script');
-    wrapper.type = 'module';
-    wrapper.setAttribute('data-dyn-script', resolvedUrl);
-    wrapper.textContent = `
-      import('${cacheBusted}')
-        .then(m => { try { window['${globalName}'] = m; } catch(e) { console.error(e); } })
-        .catch(e => console.error('wrapper import failed', e));
-    `;
-    document.body.appendChild(wrapper);
-
-    const start = Date.now();
-    (function poll() {
-      const obj = window[globalName];
-      if (obj) return resolve(obj);
-      if (Date.now() - start > 2000) return resolve(null);
-      setTimeout(poll, 80);
-    })();
-  });
+  // Use jQuery to remove all events from the main content container.
+  $content.find('*').off();
+  $content.empty();
+  
+  // Remove dynamically loaded page scripts to prevent memory leaks.
+  document.querySelectorAll('script[data-loaded-page]').forEach(s => s.remove());
 }
 
-// --- Main function: load page and its script ---
-
-function loadPage(url, $link) {
-  if (!url) return;
-
-  // If already on this page, try to refresh table
-  if (url === currentPage) {
-    const $existingTable = $('#pageContent').find('[data-toggle="table"]');
-    if ($existingTable.length && $existingTable.data('bootstrap.table')) {
-      try { $existingTable.bootstrapTable('refresh', { silent: true }); return; }
-      catch (e) { console.warn('refresh failed, will reload', e); }
-    }
+/**
+ * Loads a new page and its associated script.
+ * @param {string} url The URL of the page to load.
+ */
+async function loadPage(url) {
+  if (!url || currentPageUrl === url) {
+    return;
   }
 
-  // Destroy previous module if needed
-  if (currentModule && typeof currentModule.destroy === 'function') {
-    try { currentModule.destroy(); } catch (e) { console.warn('module destroy error', e); }
-    currentModule = null;
-  }
+  // Before loading new page, clean up old one.
+  cleanupPreviousPage();
 
-  cleanupPageContent();
+  // Show a loading message
+  $('#pageContent').html('<div class="text-center text-muted">กำลังโหลด...</div>');
 
-  $('#pageContent').load(url, function (resp, status) {
-    if (status === 'error') {
-      $('#pageContent').html("<div class='alert alert-danger'>Failed to load content</div>");
-      return;
+  try {
+    const pageEntry = pageMap[url];
+    if (!pageEntry) {
+      throw new Error('Page not found in map.');
     }
 
-    const entry = resolvePageEntry(url);
-    console.debug('loadPage: entry ->', entry ? entry.src : '(none)');
+    // Load the HTML content
+    const html = await $.get(url);
+    $('#pageContent').html(html);
 
-    if (entry && entry.src) {
-      loadScriptForEntry(entry).then(mod => {
-        currentModule = mod || (function () {
-          const mNameMatch = (entry.src || '').match(/\/([^\/\?#]+)\.js(?:[?#]|$)/);
-          const base = mNameMatch ? mNameMatch[1] : null;
-          if (base) return window[base + 'Module'] || null;
-          return null;
-        })();
+    // Load the corresponding JS module
+    const scriptSrc = pageEntry.script;
+    const module = await import(`./${scriptSrc}`); // Use dynamic import for a cleaner approach
+    currentPageModule = module;
 
-        if (currentModule && typeof currentModule.init === 'function') {
-          try { currentModule.init(); } catch (e) { console.warn('init failed', e); }
-        }
-      }).catch(err => {
-        console.error('loadScriptForEntry failed', err);
-        $('#pageContent').prepend("<div class='alert alert-danger'>Failed to load page script</div>");
-      });
+    // Check if the module has an init function and call it
+    if (currentPageModule && typeof currentPageModule.init === 'function') {
+      currentPageModule.init();
     }
 
-    currentPage = url;
+    currentPageUrl = url;
     window.scrollTo(0, 0);
-  });
 
-  // Update nav link styles
-  $('.header-center .nav-link').removeClass('active link-secondary').addClass('link-dark');
-  if ($link && $link.length) $link.addClass('active link-secondary').removeClass('link-dark');
+  } catch (err) {
+    console.error(`[Nav] Failed to load page: ${url}`, err);
+    $('#pageContent').html('<div class="alert alert-danger">ไม่สามารถโหลดเนื้อหาหน้านี้ได้</div>');
+    currentPageUrl = null;
+    currentPageModule = null;
+  }
 }
 
-// --- Handle nav link clicks ---
+// --- Event Handlers & Initial Load ---
 
+// Handle all navigation clicks
 $(document).on('click', '.header-center .nav-link', function (e) {
   e.preventDefault();
   const url = $(this).data('page');
-  console.debug('nav click ->', url, $(this).text());
-  loadPage(url, $(this));
-});
-
-// --- Initial page load (first menu item) ---
-
-$(function () {
-  const $first = $('.header-center .nav-link').first();
-  if ($first.length) {
-    console.debug('initial load ->', $first.data('page'));
-    loadPage($first.data('page'), $first);
+  const isEditing = window.appState && window.appState.editMode; // Check for edit mode
+  
+  // Guard against navigation while in edit mode
+  if (isEditing) {
+    if (confirm('ยังไม่ได้บันทึกการเปลี่ยนแปลง ต้องการเปลี่ยนหน้าโดยไม่บันทึกหรือไม่?')) {
+      loadPage(url);
+      $('.header-center .nav-link').removeClass('active link-secondary').addClass('link-dark');
+      $(this).addClass('active link-secondary').removeClass('link-dark');
+    }
+  } else {
+    loadPage(url);
+    $('.header-center .nav-link').removeClass('active link-secondary').addClass('link-dark');
+    $(this).addClass('active link-secondary').removeClass('link-dark');
   }
 });
+
+// Initial page load
+$(function () {
+  const $firstLink = $('.header-center .nav-link').first();
+  if ($firstLink.length) {
+    $firstLink.addClass('active link-secondary').removeClass('link-dark');
+    loadPage($firstLink.data('page'));
+  }
+});
+
+// Expose a global object for external communication (optional)
+window.pageLoader = {
+  loadPage
+};
